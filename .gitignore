@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.cache/
+*.log
+.tmp/
+exports/
+*.mp4
+!fixtures/README.md
+3rdparty/*
+!3rdparty/README.md
+/video/

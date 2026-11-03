@@ -1,0 +1,23 @@
+{
+  "name": "englishvideomaker", "version": "0.1.0", "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:core": "bash scripts/test-core.sh",
+    "remotion:studio": "remotion studio src/remotion/index.ts",
+    "export": "node scripts/export.mjs",
+    "fixture:video": "node scripts/make-fixture.mjs",
+    "fixture:json": "node scripts/prepare-fixture.mjs"
+  },
+  "dependencies": {
+    "@remotion/media": "4.0.539", "@remotion/renderer": "4.0.539",
+    "@remotion/bundler": "4.0.539", "remotion": "4.0.539", "react": "19.2.0", "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.539", "@types/node": "^22.0.0", "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0", "typescript": "^5.9.0", "vite": "^7.0.0"
+  }
+}

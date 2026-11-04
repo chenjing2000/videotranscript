@@ -27,3 +27,77 @@
 .folder-list{margin:15px 0;padding:10px;border:1px solid #dae0e5;border-radius:7px;max-height:260px;overflow:auto}
 .folder-list h4{margin:4px 0 9px}
 .folder-list button{display:block;width:100%;text-align:left;overflow-wrap:anywhere;margin:4px 0}
+/* M6: compact reading workspace; all toolbar and transport actions are circular. */
+.app{min-height:0;height:100vh}
+.workspace{display:grid;grid-template-columns:minmax(320px,3fr) minmax(320px,2fr);padding:10px;gap:10px;min-height:0;flex:1}
+.preview{min-width:0;background:#f4f6f8}
+.preview-stage{display:flex;align-items:center;justify-content:center;overflow:hidden}
+.scaled-holder{position:relative;flex:none;border:2px solid #aebbc5;background:transparent;overflow:hidden}
+.canvas-frame{position:absolute;top:0;left:0;transform-origin:top left}
+.transport{height:62px;gap:6px;padding:8px;min-width:0}
+.transport>input{min-width:40px}
+.transport-time{font-size:11px}
+.circle-button{display:inline-flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;padding:0;border:none;border-radius:50%;background:#A2D2E2;color:#20343f;transition:filter .15s}
+.circle-button:hover{background:#A2D2E2;filter:brightness(1.06)}
+.circle-button:disabled{opacity:.4;cursor:not-allowed}
+.circle-button:focus-visible{outline:2px solid #007175;outline-offset:2px}
+aside{min-width:0}
+.toolbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #dde5e9}
+.app-label{font-weight:650;margin-right:auto;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.panel{padding:16px;min-height:0;overflow:auto}
+.panel h3{margin-top:0}
+.transcript{word-break:normal;overflow-wrap:break-word}
+.transcript span.selected{background:#c7e5f0}
+.word-tools{background:#eef4f6;border-top:1px solid #ced9df}
+.notices{position:absolute;right:12px;bottom:12px;left:12px;z-index:20;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.notice{display:flex;align-items:start;gap:12px;justify-content:space-between;padding:10px 12px;border:1px solid #aebbc5;background:#fff;border-radius:8px;box-shadow:0 4px 15px #0002;font-size:13px;pointer-events:auto}
+.notice.error{border-color:#b44e4e}
+.notice button{border:0;background:transparent;padding:0;width:22px;height:22px;flex:none}
+.notice svg{width:17px;height:17px}
+.modal-backdrop{position:fixed;inset:0;z-index:100;background:#14202d80;display:flex;justify-content:center;align-items:center}
+.settings-dialog{background:#fff;width:min(520px,calc(100vw - 48px));max-height:calc(100vh - 48px);border-radius:14px;box-shadow:0 15px 55px #0005;display:flex;flex-direction:column;overflow:hidden}
+.settings-head{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #d7dfe4}
+.settings-body{overflow:auto;padding:14px 22px 24px}
+.canvas-fields{display:flex;gap:18px}.canvas-fields label{font-size:13px;display:flex;flex-direction:column;gap:5px;flex:1}.canvas-fields input{width:100%;height:35px;border:1px solid #bec7d1;border-radius:6px;padding:5px 8px}
+.weight-toggle{width:200px;border:none;background:#D3E5EB;color:#27495B}.weight-toggle strong{font-size:18px;margin-right:8px}
+@media(max-width:860px){.workspace{grid-template-columns:minmax(320px,1fr) minmax(280px,1fr)}.app-label{font-size:11px}.toolbar{gap:4px;padding:8px}.circle-button{width:36px;height:36px}.volume-control{width:95px}}
+
+.export-status{padding:10px 12px;margin-bottom:12px;border:1px solid #85a9bc;border-radius:8px;background:#e9f4f8;font-size:13px}
+
+/* M6 geometry revision: preview+transport form a single 3-DIP framed unit.
+   Neither the playback controls nor the frame padding is part of the MP4 canvas. */
+html,body,#root{height:100%;min-width:0;min-height:0}
+.app{height:100%;min-width:638px;min-height:0}
+.workspace{
+ display:grid;grid-template-columns:minmax(366px,max-content) minmax(240px,1fr);
+ gap:12px;padding:2px 10px;align-items:start;min-height:0;flex:1;overflow:hidden;
+}
+.preview{
+ display:flex;flex:none;flex-direction:column;align-self:start;
+ box-sizing:border-box;padding:3px;margin:0;min-width:366px;
+ background:#d8e2e7;border:0;border-radius:0;overflow:visible;
+}
+.preview-stage{display:block;flex:none;min-height:0;position:relative;overflow:hidden;background:transparent}
+.scaled-holder{position:relative;display:block;flex:none;border:0;padding:0;margin:0;overflow:hidden}
+.canvas-frame{position:absolute;top:0;left:0;transform-origin:top left}
+.transport{
+ height:48px;min-height:48px;flex:none;display:flex;flex-direction:column;
+ gap:0;padding:0;margin:0;background:#edf3f5;
+}
+.transport-time{height:18px;line-height:18px;text-align:center;font-size:11px;flex:none;font-variant-numeric:tabular-nums}
+.transport-row{display:flex;align-items:center;gap:6px;height:30px;min-height:30px;padding:0 4px}
+.transport-row input[type="range"]{flex:1;min-width:32px;margin:0}
+.transport-row .circle-button{width:28px;height:28px;flex:0 0 28px}
+.transport-row .circle-button svg{width:16px;height:16px}
+.workspace aside{align-self:stretch;min-width:240px;height:100%;min-height:0}
+.circle-button,.circle-button:hover,.weight-toggle{background:#D3E5EB;color:#27495B}
+.circle-button:hover{filter:brightness(.97)}
+@media(max-width:860px){.workspace{grid-template-columns:366px minmax(240px,1fr);gap:12px;padding:2px 10px}.circle-button{width:40px;height:40px}}
+
+/* Timeline time label is centred over the track, not over the action icons. */
+.transport{display:grid;grid-template-columns:minmax(0,1fr) 28px 28px;grid-template-rows:18px 30px;column-gap:6px;padding:0 4px}
+.transport-time{grid-column:1;grid-row:1;text-align:center}
+.transport-row{display:contents}
+.transport-row input[type="range"]{grid-column:1;grid-row:2;width:100%;min-width:0;align-self:center}
+.transport-row .circle-button:nth-of-type(1){grid-column:2;grid-row:2;align-self:center}
+.transport-row .circle-button:nth-of-type(2){grid-column:3;grid-row:2;align-self:center}

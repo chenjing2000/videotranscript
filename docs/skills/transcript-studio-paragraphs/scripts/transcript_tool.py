@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Video Transcript v2 conversion/validation: paragraph decisions are supplied, never guessed.
+"""Transcript Studio v2 conversion/validation: paragraph decisions are supplied, never guessed.
 The tool preserves all raw WhisperX fields except adding word-level breakParagraph and
-video_transcript metadata. No old-format migration path is provided.
+transcript_studio metadata. No old-format migration path is provided.
 """
 from __future__ import annotations
 import argparse
@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-EXT = '.video-transcript.json'
+EXT = '.transcript-studio.json'
 ID = re.compile(r'^s(0|[1-9][0-9]*)w(0|[1-9][0-9]*)$')
 class ValidationError(ValueError): pass
 def fail(message): raise ValidationError(message)
@@ -45,9 +45,9 @@ def words_of(data):
 def check(data,path=None):
     entries=words_of(data)
     if any(k in data for k in ('evr','paragraphs','paragraphBreaksAfter')): fail('禁止旧版分段格式')
-    meta=data.get('video_transcript')
-    if not isinstance(meta,dict) or meta.get('format')!='video-transcript' or type(meta.get('schemaVersion')) is not int or meta['schemaVersion']!=2: fail('必须使用 Video Transcript v2')
-    if set(meta)-{'format','schemaVersion','displayOverrides'}: fail('存在未知的 video_transcript 字段')
+    meta=data.get('transcript_studio')
+    if not isinstance(meta,dict) or meta.get('format')!='transcript-studio' or type(meta.get('schemaVersion')) is not int or meta['schemaVersion']!=2: fail('必须使用 Transcript Studio v2')
+    if set(meta)-{'format','schemaVersion','displayOverrides'}: fail('存在未知的 transcript_studio 字段')
     overrides=meta.get('displayOverrides',{})
     ids={ident for ident,_ in entries}
     if not isinstance(overrides,dict): fail('displayOverrides 必须为对象')
@@ -58,7 +58,7 @@ def check(data,path=None):
 
 def preview(data):
     entries=check(data)
-    overrides=data['video_transcript'].get('displayOverrides',{})
+    overrides=data['transcript_studio'].get('displayOverrides',{})
     paras=[]; current=[]
     for ident,w in entries:
         current.append(overrides.get(ident,w['word']).strip())
@@ -90,15 +90,15 @@ def read_decisions(path,ids):
 
 def build(args):
     raw=load(args.input)
-    if not isinstance(raw,dict) or any(k in raw for k in ('evr','video_transcript','paragraphs')): fail('build 只接受原始 WhisperX，不支持旧格式迁移')
+    if not isinstance(raw,dict) or any(k in raw for k in ('evr','transcript_studio','paragraphs')): fail('build 只接受原始 WhisperX，不支持旧格式迁移')
     entries=words_of(raw)
     decision=read_decisions(args.boundaries,[ident for ident,_ in entries])
     if args.output.resolve()==args.input.resolve(): fail('禁止覆盖原始字幕')
     if not args.output.name.lower().endswith(EXT): fail(f'输出必须以 {EXT} 结尾')
     if args.output.exists() and not args.force: fail('目标存在，如需重建请加 --force')
     out=copy.deepcopy(raw)
-    out['video_transcript']={'format':'video-transcript','schemaVersion':2}
-    if 'displayOverrides' in decision: out['video_transcript']['displayOverrides']=decision['displayOverrides']
+    out['transcript_studio']={'format':'transcript-studio','schemaVersion':2}
+    if 'displayOverrides' in decision: out['transcript_studio']['displayOverrides']=decision['displayOverrides']
     for ident in decision['breakAfterWordIds']:
         m=ID.fullmatch(ident);assert m is not None
         si,wi=(int(m.group(1)),int(m.group(2)))
@@ -124,7 +124,7 @@ def edit(args):
         si,wi=int(match.group(1)),int(match.group(2))
         changed['segments'][si]['words'][wi]['breakParagraph']=True
     if 'displayOverrides' in decision:
-        changed['video_transcript']['displayOverrides']=decision['displayOverrides']
+        changed['transcript_studio']['displayOverrides']=decision['displayOverrides']
     check(changed,args.output)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(changed,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -135,15 +135,15 @@ def validate(args):
     data=load(args.input);entries=check(data,args.input)
     if args.source:
         raw=load(args.source);words_of(raw)
-        cleaned=copy.deepcopy(data);cleaned.pop('video_transcript',None)
+        cleaned=copy.deepcopy(data);cleaned.pop('transcript_studio',None)
         for seg in cleaned['segments']:
             for w in seg['words']:w.pop('breakParagraph',None)
-        if cleaned!=raw: fail('源文件内容发生变化（除允许新增的 breakParagraph/video_transcript 外）')
+        if cleaned!=raw: fail('源文件内容发生变化（除允许新增的 breakParagraph/transcript_studio 外）')
     if args.preview:args.preview.write_text(preview(data),encoding='utf-8')
     print(f'校验通过：{len(entries)} 词，{1+sum(w.get("breakParagraph") is True for _,w in entries)} 段')
 
 def main():
-    parser=argparse.ArgumentParser(description='Video Transcript v2 字幕分段工具')
+    parser=argparse.ArgumentParser(description='Transcript Studio v2 字幕分段工具')
     commands=parser.add_subparsers(dest='command',required=True)
     a=commands.add_parser('inspect');a.add_argument('input',type=Path);a.add_argument('--out',type=Path);a.set_defaults(fn=inspect)
     a=commands.add_parser('build');a.add_argument('input',type=Path);a.add_argument('--boundaries',required=True,type=Path);a.add_argument('--output',required=True,type=Path);a.add_argument('--preview',type=Path);a.add_argument('--force',action='store_true');a.set_defaults(fn=build)

@@ -1,7 +1,7 @@
 {
   "language": "en",
-  "video_transcript": {
-    "format": "video-transcript",
+  "transcript_studio": {
+    "format": "transcript-studio",
     "schemaVersion": 2
   },
   "segments": [

@@ -1,42 +1,46 @@
-# Video Transcript — M5
+# Transcript Studio — M6
 
-Windows application for readable English video transcripts: WPF/.NET 10 + WebView2 + React/TypeScript + Remotion. Source MP4/audio are preserved. Logical 1200×1600 portrait output with still pages, explicit word positioning and progressive word highlights.
+Windows reading-video editor based on **WPF (.NET 10) + WebView2 + React/TypeScript + Remotion**. Import a Transcript Studio v2 JSON file, automatically locate same-stem media, edit timestamped words, and export an MP4 in a configurable resolution.
 
-## Breaking changes
-- Only `<video-stem>.video-transcript.json` with `video_transcript.format = "video-transcript"`, `schemaVersion = 2` is accepted.
-- The only paragraph marker is `segments[].words[].breakParagraph: true` (omit when not breaking). `word_segments` remains unchanged.
-- Original WhisperX JSON, v1/EVR subtitles and previous project schemas are unsupported; no migration utility.
-- Project files live at `.video-transcript/projects/<stem>.project.json` and use `video-transcript-project` schema v2.
-- All internal paragraph flag names use `breakParagraph`. Automatically assigned word IDs remain `s<segment>w<word>`.
+## Import and media priority
+
+1. Select `Lesson.transcript-studio.json` (the **only** import file type).
+2. Search **the JSON file's directory only** for `Lesson.mp4`, then `Lesson.mkv`, then `Lesson.mp3`, then `Lesson.wav` (case-insensitive filenames).
+3. Use video + subtitles if a video exists; otherwise display full-canvas subtitles with audio playback. If no media matches, display an error requiring user dismissal.
+4. MKV containers may have video codecs unsupported by WebView2. No automatic remux/transcode exists in M6.
+
+## Transcript contract
+
+`transcript_studio: {"format":"transcript-studio","schemaVersion":2}`, English `segments[].words[]` and word-local `breakParagraph: true` for paragraphs. `word_segments` and source word timings are not modified. M5 formats are intentionally unsupported. Prepare/validate using `docs/skills/transcript-studio-paragraphs/SKILL.md`.
 
 ## Build (Windows PowerShell)
+
 ```powershell
 npm.cmd ci
 npm.cmd run verify
-dotnet publish desktop/VideoTranscript.csproj -c Release -o dist/wpf-m5
-.\dist\wpf-m5\VideoTranscript.exe
+dotnet publish desktop/TranscriptStudio.csproj -c Release -o dist/wpf
+.\dist\wpf\TranscriptStudio.exe
 ```
-`verify` checks full TypeScript, Vite, core tests and Skill tests. Requires Python 3.10+ for Skill tests and .NET 10 SDK for Windows publish. The warning about `esbuild` install script may require npm script approval in your environment.
 
-## Standardize subtitle
-See `docs/skills/video-transcript-paragraphs/SKILL.md`. The Skill uses AI-reviewed word ID decisions during processing, but writes word-local `breakParagraph` marks into the final video subtitle. Preview paragraphs in `.paragraphs.md` before publishing.
+## CLI export
 
-## Export CLI
 ```powershell
-npm.cmd run export -- --video "video/lesson.mp4" --json "video/lesson.video-transcript.json" --out "video/exports/lesson.mp4"
+npm.cmd run export -- --media "video/Lesson.mp3" --json "video/Lesson.transcript-studio.json" --out "video/exports/Lesson.mp4"
 ```
-WPF drives the export directly and snapshots the project/page plan for determinism.
 
-## Layout invariants
-- `breakParagraph` alone decides natural paragraphs; punctuation alone never causes a paragraph break.
-- Word positions use deterministic computed `x` coordinates; the renderer does not reflow into another line.
-- Word-style justification applies to all but the true last line of a natural paragraph.
-- Each page takes every full line that fits, with no widow/orphan/semantic break penalties; paragraph gap is charged only between actual paragraphs **on the same page**.
-- For every non-last page, the next line (+ any on-page paragraph gap) is too tall to fit.
-- Preview and Remotion share the same page plan. Source word timing is immutable.
+Use `--project path/to/Lesson.project.json` for customized canvas size, editing overrides and typography. Requires FFmpeg/ffprobe for media inspection (or explicitly supplied media duration in the desktop path). Default canvas is 1200×1600. Output supports any even width/height in the configured range 320–3840.
 
-See `docs/M5_DESIGN_AND_VALIDATION.md` for acceptance and caveats.
+## Architecture and review
 
-## Playback, shortcuts and review skills
+- Shared word-x layout and deterministic pagination: `src/core/`.
+- Single React view for WebView2 and Remotion: `src/ui/ReaderCanvas.tsx`.
+- Windows file permissions, native media discovery, snapshots and Node export process: `desktop/`.
+- Remotion compositions and renderer: `src/remotion/` and `scripts/export.mjs`.
+- Skills: `docs/skills/transcript-studio-paragraphs/` and `docs/skills/transcript-studio-code-review/`.
+- Complete M6 changes, acceptance checks and known limitations: `docs/M6_IMPLEMENTATION_AND_VALIDATION.md`.
 
-See [player shortcuts](docs/PLAYBACK_SHORTCUTS.md). The code review Skill is in `docs/skills/video-transcript-code-review/SKILL.md`; the transcript paragraphing Skill is in `docs/skills/video-transcript-paragraphs/SKILL.md`. All GitHub commit messages for this project must be written in **English**.
+All Git commit messages must be in **English**; prefer Conventional Commits such as `feat: add JSON-driven audio and video reading modes`.
+
+## Responsive preview (M6 update)
+
+The left canvas preview keeps the project output aspect ratio and is never less than 360 DIP wide. A 3-DIP inset frames both sides and the top; the progress controls touch the bottom of the preview, with 3 DIP below. The right transcript editor takes the remaining window width (minimum 240 DIP). The volume slider has been removed from the transport. Change the final exported MP4 width and height in **Settings → 输出视频尺寸**; resizing the app window changes preview scale only. See `docs/M6_IMPLEMENTATION_AND_VALIDATION.md` for the exact geometry and Windows acceptance tests.

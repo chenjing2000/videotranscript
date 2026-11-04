@@ -1,10 +1,10 @@
 /** Standalone CLI admission gate; mirrors src/core/transcript.ts. */
-export function assertVideoTranscript(input){
+export function assertTranscriptStudio(input){
  const object=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
- const meta=input?.video_transcript;
- if(!object(input)||!object(meta)||meta.format!=='video-transcript'||meta.schemaVersion!==2)
-  throw new Error('仅支持 Video Transcript v2 (*.video-transcript.json)');
- if(Object.keys(meta).some(k=>!['format','schemaVersion','displayOverrides'].includes(k)))throw new Error('未知 video_transcript 字段');
+ const meta=input?.transcript_studio;
+ if(!object(input)||!object(meta)||meta.format!=='transcript-studio'||meta.schemaVersion!==2)
+  throw new Error('仅支持 Transcript Studio v2 (*.transcript-studio.json)');
+ if(Object.keys(meta).some(k=>!['format','schemaVersion','displayOverrides'].includes(k)))throw new Error('未知 transcript_studio 字段');
  if('evr' in input||'paragraphs' in input||'paragraphBreaksAfter' in input)throw new Error('禁止旧格式字段');
  if(input.language!=='en'||!Array.isArray(input.segments)||!input.segments.length)throw new Error('必须包含英语 segments');
  const ids=new Set();let last=-Infinity,paragraphs=1,terminal;

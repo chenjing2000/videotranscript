@@ -1,12 +1,12 @@
-# Video Transcript — player controls, skills and icon update
+# Transcript Studio — player controls, skills and icon update
 
 ## Implementation
 
 - Transport controls have been reordered to progress slider, time, play/pause icon, and stop icon. Stop calls `pause()` and seeks to 0; play/pause icon follows actual media events.
 - Keyboard bindings are implemented by `src/core/player-shortcuts.ts` and wired in `src/main.tsx`; see `docs/PLAYBACK_SHORTCUTS.md`. While an edit box, select, text area, content-editable region or seek slider has focus, the shortcuts are ignored to avoid disrupting edits. Modifier/shift combinations that are not specified are ignored. Frame stepping is approximate seeking by `1 / project.export.fps`, not a decoder-exact frame advance; variable frame-rate MP4 may require a more sophisticated decoder approach.
-- `Ctrl+O` opens an MP4 picker; the folder picker is opened only by the visible button (no keyboard shortcut). WPF uses a native `OpenFolderDialog` and displays MP4 files in the chosen folder. When opening by folder selection it serves the video to WebView2 through a mapped media host; the C# host ensures the selected MP4 belongs to the chosen folder. The standard `.video-transcript.json` must still exist next to the MP4. In browser dev mode, directory upload is used where supported.
-- `desktop/assets/app.ico` is embedded into `VideoTranscript.exe`; `public/app.ico` is the same icon used as the website favicon. Both are copied from the user-supplied ICO, not redrawn or altered.
-- Both reusable Skills are under `docs/skills/`: `video-transcript-code-review` and `video-transcript-paragraphs`. Their scripts, tests and references remain together. The `test:skill` script and all project docs were updated to match the new folder path.
+- `Ctrl+O` opens an MP4 picker; the folder picker is opened only by the visible button (no keyboard shortcut). WPF uses a native `OpenFolderDialog` and displays MP4 files in the chosen folder. When opening by folder selection it serves the video to WebView2 through a mapped media host; the C# host ensures the selected MP4 belongs to the chosen folder. The standard `.transcript-studio.json` must still exist next to the MP4. In browser dev mode, directory upload is used where supported.
+- `desktop/assets/app.ico` is embedded into `TranscriptStudio.exe`; `public/app.ico` is the same icon used as the website favicon. Both are copied from the user-supplied ICO, not redrawn or altered.
+- Both reusable Skills are under `docs/skills/`: `transcript-studio-code-review` and `transcript-studio-paragraphs`. Their scripts, tests and references remain together. The `test:skill` script and all project docs were updated to match the new folder path.
 - The code-review Skill requires **English-only GitHub commit subjects and bodies**, recommends Conventional Commits, and forbids forced pushes.
 
 ## Verified in this environment
@@ -29,8 +29,8 @@ npm.cmd run typecheck
 npm.cmd run build
 npm.cmd test
 npm.cmd run test:skill
-dotnet publish desktop/VideoTranscript.csproj -c Release -o dist/wpf
-.\dist\wpf\VideoTranscript.exe
+dotnet publish desktop/TranscriptStudio.csproj -c Release -o dist/wpf
+.\dist\wpf\TranscriptStudio.exe
 ```
 
 ### Manual checks

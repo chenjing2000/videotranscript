@@ -1,13 +1,13 @@
-import type {Transcript,VideoTranscriptInput,Word,Project} from './types';
+import type {Transcript,TranscriptStudioInput,Word,Project} from './types';
 const valid = (n:unknown):n is number => typeof n==='number' && Number.isFinite(n);
 const record = (v:unknown):v is Record<string,unknown> => v!==null && typeof v==='object' && !Array.isArray(v);
-/** Video Transcript v2 is the only supported subtitle format. */
-export function validateVideoTranscript(input:unknown):asserts input is VideoTranscriptInput {
- if(!record(input))throw new Error('字幕必须是 Video Transcript v2 JSON 对象');
- const meta=input.video_transcript;
- if(!record(meta)||meta.format!=='video-transcript'||meta.schemaVersion!==2)
-  throw new Error('仅支持 Video Transcript v2：请使用 docs/skills/video-transcript-paragraphs Skill 生成 *.video-transcript.json');
- for(const key of Object.keys(meta))if(!['format','schemaVersion','displayOverrides'].includes(key))throw new Error(`不支持的 video_transcript 字段：${key}`);
+/** Transcript Studio v2 is the only supported subtitle format. */
+export function validateTranscriptStudio(input:unknown):asserts input is TranscriptStudioInput {
+ if(!record(input))throw new Error('字幕必须是 Transcript Studio v2 JSON 对象');
+ const meta=input.transcript_studio;
+ if(!record(meta)||meta.format!=='transcript-studio'||meta.schemaVersion!==2)
+  throw new Error('仅支持 Transcript Studio v2：请使用 docs/skills/transcript-studio-paragraphs Skill 生成 *.transcript-studio.json');
+ for(const key of Object.keys(meta))if(!['format','schemaVersion','displayOverrides'].includes(key))throw new Error(`不支持的 transcript_studio 字段：${key}`);
  if('evr' in input||'paragraphs' in input||'paragraphBreaksAfter' in input)throw new Error('禁止旧版自然段字段');
  if(input.language!=='en')throw new Error('仅支持 language: "en" 的英语字幕');
  if(!Array.isArray(input.segments)||!input.segments.length)throw new Error('必须包含非空 segments 数组');
@@ -40,10 +40,10 @@ export function validateVideoTranscript(input:unknown):asserts input is VideoTra
   }
  }
 }
-export function parseVideoTranscript(input:unknown):Transcript {
- validateVideoTranscript(input);
+export function parseTranscriptStudio(input:unknown):Transcript {
+ validateTranscriptStudio(input);
  const words:Word[]=[];
- const overrides=input.video_transcript.displayOverrides??{};
+ const overrides=input.transcript_studio.displayOverrides??{};
  input.segments.forEach((segment,si)=>segment.words.forEach((entry,wi)=>{
   const id=`s${si}w${wi}`,original=entry.word.trim(),breakParagraph=entry.breakParagraph===true;
   words.push({id,segmentId:`s${si}`,original,display:overrides[id]??original,sourceDisplay:overrides[id]??original,start:entry.start,end:entry.end,score:entry.score,hidden:false,breakParagraph,sourceBreakParagraph:breakParagraph});

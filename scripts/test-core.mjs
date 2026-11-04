@@ -6,17 +6,18 @@ import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 
 const require=createRequire(import.meta.url);
-const tsc=require.resolve('typescript/bin/tsc');
+let tsc;try {tsc=require.resolve('typescript/bin/tsc')} catch {tsc=process.env.TSC_PATH||'tsc'}
 const core=resolve('src/core');
 const sources=readdirSync(core).filter(name=>name.endsWith('.ts')).map(name=>resolve(core,name));
 if(!sources.length)throw new Error('No core TypeScript files found');
-mkdirSync('.tmp-core',{recursive:true});
+mkdirSync('.tmp-core/empty-types',{recursive:true});
 function run(args){
  const result=spawnSync(process.execPath,args,{stdio:'inherit',shell:false});
  if(result.error)throw result.error;
  if(result.status!==0)process.exit(result.status??1);
 }
-run([tsc,'--target','ES2022','--module','commonjs','--strict','--skipLibCheck','--outDir','.tmp-core',...sources]);
+const compileArgs=['--typeRoots','.tmp-core/empty-types','--target','ES2022','--module','commonjs','--strict','--skipLibCheck','--outDir','.tmp-core',...sources];
+if(tsc==='tsc'){const r=spawnSync('tsc',compileArgs,{stdio:'inherit',shell:process.platform==='win32'});if(r.status!==0)process.exit(r.status??1)}else run([tsc,...compileArgs]);
 writeFileSync('.tmp-core/package.json',JSON.stringify({type:'commonjs'}));
 const tests=readdirSync('tests').filter(name=>name.endsWith('.test.mjs')).map(name=>resolve('tests',name));
 run(['--test',...tests]);

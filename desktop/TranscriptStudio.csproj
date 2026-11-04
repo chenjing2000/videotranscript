@@ -5,8 +5,8 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>VideoTranscript</AssemblyName>
-    <RootNamespace>VideoTranscript</RootNamespace>
+    <AssemblyName>TranscriptStudio</AssemblyName>
+    <RootNamespace>TranscriptStudio</RootNamespace>
     <ApplicationIcon>assets/app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

@@ -4,3 +4,4 @@ export * from './pagination';
 export * from './style-presets';
 
 export * from './player-shortcuts';
+export * from './media';

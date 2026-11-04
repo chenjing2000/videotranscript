@@ -9,28 +9,29 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using Microsoft.Web.WebView2.Wpf;
 
-namespace VideoTranscript;
+namespace TranscriptStudio;
 
 internal sealed class ReaderWindow : Window
 {
-    private const string AppHost = "reader.video-transcript.local";
+    private const string AppHost = "reader.transcript-studio.local";
     private const string AppUrl = "https://" + AppHost + "/index.html";
     private readonly WebView2 view = new();
     private Source? source;
     private bool exporting;
-    private string? selectedFolder;
+    private bool initialLayoutApplied;
 
-    private sealed record Source(string Video, string Transcript, string Fingerprint, string Project);
+    private sealed record Source(string Media, string Transcript, string Fingerprint, string Project, string MediaKind);
 
     [STAThread]
     private static void Main() => new Application().Run(new ReaderWindow());
 
     private ReaderWindow()
     {
-        Title = "Video Transcript · WPF 验证";
-        Width = 1200;
+        Title = "Transcript Studio";
+        Width = 1100;
         Height = 820;
-        MinWidth = 820;
+        // Updated from the responsive preview constraints after WebView2 loads.
+        MinWidth = 638;
         MinHeight = 560;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Content = view;
@@ -49,7 +50,7 @@ internal sealed class ReaderWindow : Window
                 throw new FileNotFoundException("缺少打包后的界面。请先运行前端构建。");
 
             var profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "VideoTranscript", "WebView2");
+                "TranscriptStudio", "WebView2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: profile);
             await view.EnsureCoreWebView2Async(environment);
             var browser = view.CoreWebView2;
@@ -77,15 +78,12 @@ internal sealed class ReaderWindow : Window
             var request = message.RootElement;
             switch (request.GetProperty("kind").GetString())
             {
-                case "open-folder":
-                    OpenFolder();
-                    break;
-                case "open-path":
-                    OpenFromFolder(request.GetProperty("path").GetString());
+                case "layout":
+                    UpdateWindowLayout(request);
                     break;
                 case "open":
                     if (args.AdditionalObjects.FirstOrDefault() is not CoreWebView2File file)
-                        throw new InvalidOperationException("无法取得所选视频的本地路径。");
+                        throw new InvalidOperationException("无法获取 JSON 文件的本地路径。");
                     OpenPair(file.Path);
                     break;
                 case "save":
@@ -98,75 +96,90 @@ internal sealed class ReaderWindow : Window
         }
         catch (Exception error)
         {
-            Send(new { kind = "status", message = error.Message, busy = false });
+            Send(new { kind = "status", message = error.Message, busy = false, error = true });
         }
     }
 
-    private void OpenFolder()
+    private void UpdateWindowLayout(JsonElement request)
     {
-        var picker = new OpenFolderDialog { Title = "选择包含 MP4 和标准字幕的文件夹" };
-        if (picker.ShowDialog(this) != true) return;
-        selectedFolder = Path.GetFullPath(picker.FolderName);
-        var videos = Directory.EnumerateFiles(selectedFolder, "*", SearchOption.TopDirectoryOnly)
-            .Where(path => string.Equals(Path.GetExtension(path), ".mp4", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(path => Path.GetFileName(path), StringComparer.CurrentCultureIgnoreCase)
-            .Select(path => new { name = Path.GetFileName(path), path })
-            .ToArray();
-        Send(new { kind = "folder", folder = selectedFolder, videos });
+        // React reports the minimum client area in CSS pixels; WebView2 at the
+        // standard zoom has one CSS pixel per WPF device-independent pixel.
+        // Account for the native title bar and window chrome exactly once.
+        var clientW = request.GetProperty("minimumClientWidth").GetDouble();
+        var clientH = request.GetProperty("minimumClientHeight").GetDouble();
+        var outputW = request.GetProperty("outputWidth").GetDouble();
+        var outputH = request.GetProperty("outputHeight").GetDouble();
+        if (!double.IsFinite(clientW) || !double.IsFinite(clientH) ||
+            !double.IsFinite(outputW) || !double.IsFinite(outputH) ||
+            clientW < 638 || clientW > 10000 || clientH <= 0 || clientH > 10000 ||
+            outputW <= 0 || outputH <= 0)
+            return;
+
+        var chromeW = Math.Max(0, ActualWidth - view.ActualWidth);
+        var chromeH = Math.Max(0, ActualHeight - view.ActualHeight);
+        MinWidth = Math.Ceiling(clientW + chromeW);
+        MinHeight = Math.Ceiling(clientH + chromeH);
+        if (!initialLayoutApplied)
+        {
+            initialLayoutApplied = true;
+            var screen = SystemParameters.WorkArea;
+            var ratio = outputH / outputW;
+            // Keep a comfortable preview on first launch, fitting the screen.
+            var desiredW = Math.Max(clientW, 1060);
+            var desiredH = Math.Max(clientH, 480 * ratio + 58);
+            Width = Math.Max(MinWidth, Math.Min(screen.Width * 0.9, desiredW + chromeW));
+            Height = Math.Max(MinHeight, Math.Min(screen.Height * 0.9, desiredH + chromeH));
+        }
+        else
+        {
+            // Never force the window's aspect ratio during manual edge/corner dragging.
+            // WPF's min dimensions enforce the 360 / 240 DIP column constraints.
+            if (Width < MinWidth) Width = MinWidth;
+            if (Height < MinHeight) Height = MinHeight;
+        }
     }
 
-    private void OpenFromFolder(string? candidate)
+    private void OpenPair(string subtitle)
     {
-        if (selectedFolder == null || string.IsNullOrWhiteSpace(candidate))
-            throw new InvalidOperationException("请先选择文件夹。");
-        var full = Path.GetFullPath(candidate);
-        if (!string.Equals(Path.GetDirectoryName(full), selectedFolder, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("只能打开已选择文件夹中的 MP4 文件。");
-        OpenPair(full, useMappedMedia: true);
-    }
-
-    private void OpenPair(string video, bool useMappedMedia = false)
-    {
-        if (!string.Equals(Path.GetExtension(video), ".mp4", StringComparison.OrdinalIgnoreCase) || !File.Exists(video))
-            throw new FileNotFoundException("请选择本地 MP4 文件。");
-        var subtitle = Path.Combine(Path.GetDirectoryName(video)!, Path.GetFileNameWithoutExtension(video) + ".video-transcript.json");
-        if (!File.Exists(subtitle))
-            throw new FileNotFoundException("找不到同目录的 Video Transcript 标准字幕文件（<视频文件名>.video-transcript.json）。请先使用 docs/skills/video-transcript-paragraphs Skill 处理 WhisperX JSON。");
+        if (!subtitle.EndsWith(".transcript-studio.json", StringComparison.OrdinalIgnoreCase) || !File.Exists(subtitle))
+            throw new FileNotFoundException("请选择 .transcript-studio.json 格式的标准字幕。");
+        var folder = Path.GetDirectoryName(Path.GetFullPath(subtitle))!;
+        var filename = Path.GetFileName(subtitle);
+        var stem = filename[..^".transcript-studio.json".Length];
+        var names = Directory.EnumerateFiles(folder, "*", SearchOption.TopDirectoryOnly).ToArray();
+        string? media = null;
+        string? mediaKind = null;
+        foreach (var ext in new[] { ".mp4", ".mkv", ".mp3", ".wav" })
+        {
+            media = names.FirstOrDefault(candidate => string.Equals(Path.GetFileName(candidate), stem + ext,
+                StringComparison.OrdinalIgnoreCase));
+            if (media != null) { mediaKind = ext is ".mp3" or ".wav" ? "audio" : "video"; break; }
+        }
+        if (media == null || mediaKind == null)
+            throw new FileNotFoundException($"未找到与 {filename} 同名的媒体文件（已查找 MP4、MKV、MP3、WAV）。");
 
         var bytes = File.ReadAllBytes(subtitle);
         var transcript = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
-        // Reject raw WhisperX before opening media; this check complements the
-        // full strict word-boundary validation in TypeScript and the CLI.
         using (var parsed = JsonDocument.Parse(transcript))
         {
             var root = parsed.RootElement;
             if (!root.TryGetProperty("language", out var language) || language.GetString() != "en" ||
-                !root.TryGetProperty("video_transcript", out var meta) || meta.ValueKind != JsonValueKind.Object ||
-                !meta.TryGetProperty("format", out var format) || format.GetString() != "video-transcript" ||
+                !root.TryGetProperty("transcript_studio", out var meta) || meta.ValueKind != JsonValueKind.Object ||
+                !meta.TryGetProperty("format", out var format) || format.GetString() != "transcript-studio" ||
                 !meta.TryGetProperty("schemaVersion", out var version) || version.GetInt32() != 2 ||
-                root.TryGetProperty("evr", out _) || root.TryGetProperty("paragraphs", out _) || root.TryGetProperty("paragraphBreaksAfter", out _))
-                throw new InvalidOperationException("字幕不是 Video Transcript v2 标准格式。请先运行 docs/skills/video-transcript-paragraphs Skill。");
+                root.TryGetProperty("video_transcript", out _) || root.TryGetProperty("evr", out _))
+                throw new InvalidOperationException("字幕不是 Transcript Studio v2 标准格式。");
         }
         var fingerprint = Convert.ToHexString(SHA256.HashData(bytes));
-        var folder = Path.GetDirectoryName(video)!;
-        var projectPath = Path.Combine(folder, ".video-transcript", "projects",
-            Path.GetFileNameWithoutExtension(video) + ".project.json");
-        source = new Source(video, subtitle, fingerprint, projectPath);
-        string? videoUrl = null;
-        if (useMappedMedia)
-        {
-            const string mediaHost = "media.video-transcript.local";
-            view.CoreWebView2.SetVirtualHostNameToFolderMapping(mediaHost, folder, CoreWebView2HostResourceAccessKind.AllowCors);
-            videoUrl = $"https://{mediaHost}/{Uri.EscapeDataString(Path.GetFileName(video))}";
-        }
+        var projectPath = Path.Combine(folder, ".transcript-studio", "projects", stem + ".project.json");
+        const string mediaHost = "media.transcript-studio.local";
+        view.CoreWebView2.SetVirtualHostNameToFolderMapping(mediaHost, folder, CoreWebView2HostResourceAccessKind.Allow);
+        var mediaUrl = $"https://{mediaHost}/{Uri.EscapeDataString(Path.GetFileName(media))}";
+        source = new Source(media, subtitle, fingerprint, projectPath, mediaKind);
         Send(new
         {
-            kind = "pair",
-            videoName = Path.GetFileName(video),
-            subtitleName = Path.GetFileName(subtitle),
-            videoUrl,
-            transcript,
-            fingerprint,
+            kind = "pair", mediaName = Path.GetFileName(media), mediaKind, subtitleName = filename,
+            mediaUrl, transcript, fingerprint,
             project = File.Exists(projectPath) ? File.ReadAllText(projectPath) : null
         });
     }
@@ -174,9 +187,9 @@ internal sealed class ReaderWindow : Window
     private Source CheckSource(JsonElement project)
     {
         var current = source ?? throw new InvalidOperationException("请先打开素材。");
-        if (!project.TryGetProperty("format", out var projectFormat) || projectFormat.GetString() != "video-transcript-project" ||
+        if (!project.TryGetProperty("format", out var projectFormat) || projectFormat.GetString() != "transcript-studio-project" ||
             !project.TryGetProperty("schemaVersion", out var schema) || schema.ValueKind != JsonValueKind.Number || schema.GetInt32() != 2)
-            throw new InvalidOperationException("不支持的工程版本：必须为 Video Transcript Project v2。");
+            throw new InvalidOperationException("不支持的工程版本：必须为 Transcript Studio Project v2。");
         if (project.GetProperty("source").GetProperty("subtitleSha256").GetString() != current.Fingerprint ||
             Fingerprint(current.Transcript) != current.Fingerprint)
             throw new InvalidOperationException("源字幕已变化，请重新打开素材。");
@@ -214,9 +227,9 @@ internal sealed class ReaderWindow : Window
         if (root == null)
             throw new DirectoryNotFoundException("找不到项目的 Remotion 导出脚本。");
 
-        var folder = Path.Combine(Path.GetDirectoryName(current.Video)!, "exports");
+        var folder = Path.Combine(Path.GetDirectoryName(current.Media)!, "exports");
         Directory.CreateDirectory(folder);
-        var stem = Path.GetFileNameWithoutExtension(current.Video) + "_reading";
+        var stem = Path.GetFileNameWithoutExtension(current.Media) + "_reading";
         var output = Path.Combine(folder, stem + ".mp4");
         for (var version = 2; File.Exists(output); version++)
             output = Path.Combine(folder, $"{stem}_{version}.mp4");
@@ -224,7 +237,7 @@ internal sealed class ReaderWindow : Window
         exporting = true;
         string? snapshot = null;
         string? pagePlanSnapshot = null;
-        var pending = Path.Combine(folder, $".video-transcript-{Guid.NewGuid():N}.mp4");
+        var pending = Path.Combine(folder, $".transcript-studio-{Guid.NewGuid():N}.mp4");
         try
         {
             Send(new { kind = "status", message = "正在准备导出…", busy = true });
@@ -247,7 +260,7 @@ internal sealed class ReaderWindow : Window
             };
             string[] arguments = [
                 Path.Combine(root.FullName, "scripts", "export.mjs"),
-                "--video", current.Video, "--json", current.Transcript, "--project", snapshot,
+                "--media", current.Media, "--json", current.Transcript, "--project", snapshot,
                 "--out", pending,
                 "--duration", request.GetProperty("duration").GetDouble().ToString("R", CultureInfo.InvariantCulture),
                 "--video-height", request.GetProperty("videoHeight").GetInt32().ToString(CultureInfo.InvariantCulture)
@@ -267,7 +280,7 @@ internal sealed class ReaderWindow : Window
                 start.ArgumentList.Add(chrome);
             }
 
-            var evidence = Environment.GetEnvironmentVariable("VIDEO_TRANSCRIPT_M1_EVIDENCE");
+            var evidence = Environment.GetEnvironmentVariable("TRANSCRIPT_STUDIO_M1_EVIDENCE");
             if (!string.IsNullOrEmpty(evidence))
                 await M1Capture.SaveAsync(view.CoreWebView2, evidence, request);
             var watch = Stopwatch.StartNew();

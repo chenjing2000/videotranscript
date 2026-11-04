@@ -1,4 +1,4 @@
-# Video Transcript — player shortcuts
+# Transcript Studio — player shortcuts
 
 Shortcuts apply when focus is **not** inside a text field, select, content-editable area or seek slider. `Ctrl+S` saves the editing project (existing behavior). Frame stepping pauses playback; the frame duration is based on the project export fps (default 30). Stop pauses and seeks to 0. Seek commands clamp to the media duration. Volume step is 5 percentage points.
 
@@ -22,3 +22,5 @@ Shortcuts apply when focus is **not** inside a text field, select, content-edita
 The transport is ordered **progress bar → elapsed/total time → play/pause icon → stop icon**. The folder picker remains available via the visible button, without a keyboard shortcut. WPF uses a native folder dialog and lists MP4 files in the chosen directory. Browser development mode uses folder upload where supported; these modes are not identical for file system security reasons.
 
 Windows app icon source: `desktop/assets/app.ico`. Web favicon source: `public/app.ico` (copied from the identical uploaded ICO).
+
+M6 layout revision: the on-screen volume slider has been removed. The volume and mute keyboard shortcuts remain available. The transport time label is displayed above the progress track.

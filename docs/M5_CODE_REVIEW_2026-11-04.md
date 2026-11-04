@@ -1,8 +1,8 @@
-# Video Transcript M5 — 代码审查报告（2026-11-04）
+# Transcript Studio M5 — 代码审查报告（2026-11-04）
 
 ## 范围与依据
 
-按照 `docs/skills/video-transcript-code-review/SKILL.md`，审查 WPF/WebView2、React UI、TypeScript 核心、Video Transcript v2 字幕契约、分页/两端对齐、Remotion 导出、测试与项目资源。审查基线为此前交付的 `VideoTranscript_M5_Player_Skills_Icon_Update.zip`，不是用户本地未上传的最新 Git 工作树。本次修改坚持最小必要原则。
+按照 `docs/skills/transcript-studio-code-review/SKILL.md`，审查 WPF/WebView2、React UI、TypeScript 核心、Transcript Studio v2 字幕契约、分页/两端对齐、Remotion 导出、测试与项目资源。审查基线为此前交付的 `TranscriptStudio_M5_Player_Skills_Icon_Update.zip`，不是用户本地未上传的最新 Git 工作树。本次修改坚持最小必要原则。
 
 ## 已修复：确定性问题
 
@@ -13,12 +13,12 @@
 | 正确性/鲁棒性 | `src/core/pagination.ts` | `isPagePlan()` 对外部分页快照仅作浅层验证，不能有效拒绝损坏的内部词位置和开关时间 | 检查结构、行/词字段、数值有效性、索引以及时间顺序；加入非法快照测试。此校验不代替工程源数据的 SHA-256 校验 |
 | 文档与清理 | `docs/PLAYBACK_SHORTCUTS.md`、更新说明、Code Review Skill、`.gitignore` | 快捷键说明过期；Python 缓存未忽略 | 同步更新文档，并排除 `__pycache__/`、`*.pyc` |
 
-**保留行为**：Space 播放/暂停、X 停止、F/D 单帧移动、方向键前后跳转、音量/静音、Ctrl+O 打开文件、Ctrl+S 保存；打开文件夹按钮、Video Transcript v2 数据标准、单词绝对横坐标、Word 两端对齐、严格逐行分页和 Remotion 导出架构均未删除或替换。
+**保留行为**：Space 播放/暂停、X 停止、F/D 单帧移动、方向键前后跳转、音量/静音、Ctrl+O 打开文件、Ctrl+S 保存；打开文件夹按钮、Transcript Studio v2 数据标准、单词绝对横坐标、Word 两端对齐、严格逐行分页和 Remotion 导出架构均未删除或替换。
 
 ## 已检查但不做高风险重构
 
 - **架构**：WPF 控制本地文件、进程、窗口，React 负责用户界面；核心段落/分页逻辑位于 `src/core`。当前结构可用，未强行引入 MVVM 框架、DI 或消息总线。
-- **数据契约**：前端和 CLI 的 v2 校验器均验证 `video_transcript.format`、版本和 `breakParagraph`；只在单词级设置段落标记；原始 `word_segments` 不加标记。Skill 提供原始源数据一致性校验。
+- **数据契约**：前端和 CLI 的 v2 校验器均验证 `transcript_studio.format`、版本和 `breakParagraph`；只在单词级设置段落标记；原始 `word_segments` 不加标记。Skill 提供原始源数据一致性校验。
 - **排版**：保留 1200×1600 固定画布、横坐标定位、自然段末行左对齐与逐行最大填充。新增覆盖“隐藏分段词”的回归测试。
 - **播放**：快捷键在输入框、下拉框和进度条聚焦时被屏蔽，删除 `Ctrl+F` 不影响 F 单帧前进。
 - **导出**：导出路径带碰撞后缀且不覆盖原始视频；C# 使用临时工程与分页快照，导出完成后清理；已有源指纹校验保留。
@@ -36,7 +36,7 @@
 
 - `tsc --target ES2022 --module commonjs --strict --skipLibCheck --outDir .tmp-core src/core/*.ts`（环境全局 TypeScript 5.8.3）：**通过**。
 - `node --test tests/*.test.mjs`：**58/58 通过**，包括删除 Ctrl+F 和新增分页数据防护测试。
-- `python -m unittest discover docs/skills/video-transcript-paragraphs/tests -v`：**6/6 通过**。
+- `python -m unittest discover docs/skills/transcript-studio-paragraphs/tests -v`：**6/6 通过**。
 - `npm ci --offline --ignore-scripts --no-audit --no-fund`：**未通过**（npm 离线缓存缺少依赖）。
 - `npm run typecheck` / `npm run build`：**未通过**（`@types/node` 等完整依赖缺失）。
 - `dotnet publish` / Windows GUI / Remotion MP4：**未执行**（平台和依赖不具备）。
@@ -49,8 +49,8 @@ npm.cmd run typecheck
 npm.cmd run build
 npm.cmd test
 npm.cmd run test:skill
-dotnet publish desktop/VideoTranscript.csproj -c Release -o dist/wpf
-.\dist\wpf\VideoTranscript.exe
+dotnet publish desktop/TranscriptStudio.csproj -c Release -o dist/wpf
+.\dist\wpf\TranscriptStudio.exe
 ```
 
 手工验证：`Ctrl+F` 不应打开文件夹，点击“打开文件夹”仍打开选择窗口；`F` 仍可单帧前进；其余快捷键在视频播放和字幕编辑场景下不冲突；按 v2 字幕可预览、保存工程并导出有声音的 MP4。

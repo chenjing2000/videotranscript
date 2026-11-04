@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
-import {assertVideoTranscript} from '../scripts/video-transcript-contract.mjs';
+import {assertTranscriptStudio} from '../scripts/transcript-studio-contract.mjs';
 const require=createRequire(import.meta.url),core=require('../.tmp-core/index.js');
-const data=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.video-transcript.json','utf8'));
+const data=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.transcript-studio.json','utf8'));
 const raw=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.json','utf8'));
 const clone=structuredClone;
-function okay(d){const cli=assertVideoTranscript(d),parsed=core.parseVideoTranscript(d);assert.equal(cli.wordCount,parsed.words.length);return parsed;}
-function reject(d,pattern){assert.throws(()=>assertVideoTranscript(d),pattern);assert.throws(()=>core.parseVideoTranscript(d),pattern);}
+function okay(d){const cli=assertTranscriptStudio(d),parsed=core.parseTranscriptStudio(d);assert.equal(cli.wordCount,parsed.words.length);return parsed;}
+function reject(d,pattern){assert.throws(()=>assertTranscriptStudio(d),pattern);assert.throws(()=>core.parseTranscriptStudio(d),pattern);}
 test('M5: v2 200 source anchor words/times preserved',()=>{
  const t=okay(data);assert.equal(t.words.length,200);
  assert.deepEqual(t.words.map(w=>[w.original,w.start,w.end]),raw.segments.flatMap(s=>s.words.map(w=>[w.word.trim(),w.start,w.end])));
@@ -19,7 +19,7 @@ test('M5: no break after animal lovers; In the UK shares paragraph',()=>{
 });
 test('M5: only v2 accepted; raw, v1 and old fields rejected',()=>{
  reject(raw,/v2/);
- const a=clone(data);a.video_transcript.schemaVersion=1;reject(a,/v2/);
+ const a=clone(data);a.transcript_studio.schemaVersion=1;reject(a,/v2/);
  const b=clone(data);b.evr={format:'evr-transcript',schemaVersion:1,paragraphBreaksAfter:[]};reject(b,/旧|禁止/);
  const c=clone(data);c.segments[0].words[0].paragraphAfter=true;reject(c,/旧/);
 });
@@ -38,7 +38,7 @@ test('M5: word_segments is only raw data, never a break carrier',()=>{
 test('M5: overrides can remove/add paragraph breaks, source stays untouched',()=>{
  const t=okay(data),original=t.words.find(w=>w.breakParagraph);assert.ok(original);
  const changed=t.words.map(w=>w.id===original.id?{...w,breakParagraph:false}:w);
- const project=core.saveProjectView(core.createProject('a.mp4','a.video-transcript.json',t.words),changed);
+ const project=core.saveProjectView(core.createProject('a.mp4','a.transcript-studio.json',t.words),changed);
  assert.equal(project.overrides[original.id].breakParagraph,false);
  assert.equal(core.applyOverrides(t,project).words.find(w=>w.id===original.id).breakParagraph,false);
  assert.equal(t.words.find(w=>w.id===original.id).breakParagraph,true);
@@ -46,8 +46,8 @@ test('M5: overrides can remove/add paragraph breaks, source stays untouched',()=
  assert.equal(core.validateProject({...project,schemaVersion:1}),false);
 });
 test('M5: unknown schema keys and malformed displayOverrides rejected',()=>{
- const a=clone(data);a.video_transcript.extra=true;reject(a,/字段/);
- const b=clone(data);b.video_transcript.displayOverrides={'s4w0':'two words'};reject(b,/显示|覆盖/);
+ const a=clone(data);a.transcript_studio.extra=true;reject(a,/字段/);
+ const b=clone(data);b.transcript_studio.displayOverrides={'s4w0':'two words'};reject(b,/显示|覆盖/);
 });
 test('M5: malformed or reversed source word timestamps rejected',()=>{
  const a=clone(data);a.segments[3].words[0].start=-10;reject(a,/时间/);

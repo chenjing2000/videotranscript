@@ -70,10 +70,10 @@ test('M2: refuses page shorter than one row',()=>{
  assert.throws(()=>plan(words(['text']),8,100),/不足/);
 });
 test('M2: parses presegmented paragraph metadata without changing source time',()=>{
- const inp=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.video-transcript.json','utf8'));
- const source=core.parseVideoTranscript(inp);assert.equal(source.words.length,200);
+ const inp=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.transcript-studio.json','utf8'));
+ const source=core.parseTranscriptStudio(inp);assert.equal(source.words.length,200);
  const tagged=structuredClone(inp);tagged.segments[0].words[0].breakParagraph=true;
- const trans=core.parseVideoTranscript(tagged);
+ const trans=core.parseTranscriptStudio(tagged);
  assert.equal(trans.words[0].breakParagraph,true);
  assert.deepEqual(trans.words.map(w=>[w.start,w.end]),source.words.map(w=>[w.start,w.end]));
 });
@@ -84,8 +84,8 @@ test('M5: normalize missing optional style fields in a v2 project',()=>{
 });
 
 test('M2: removing source paragraph break survives project save/reload',()=>{
- const input={language:'en',video_transcript:{format:'video-transcript',schemaVersion:2},segments:[{words:[{word:'One.',start:1,end:1.5,breakParagraph:true}]},{words:[{word:'Two.',start:2,end:2.5}]}]};
- const parsed=core.parseVideoTranscript(input);
+ const input={language:'en',transcript_studio:{format:'transcript-studio',schemaVersion:2},segments:[{words:[{word:'One.',start:1,end:1.5,breakParagraph:true}]},{words:[{word:'Two.',start:2,end:2.5}]}]};
+ const parsed=core.parseTranscriptStudio(input);
  assert.equal(parsed.words[0].breakParagraph,true);
  const changed=parsed.words.map((w,i)=>i===0?{...w,breakParagraph:false}:w);
  const project=core.saveProjectView(core.createProject('x.mp4','x.json',parsed.words),changed);

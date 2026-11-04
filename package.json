@@ -1,5 +1,5 @@
 {
-  "name": "video-transcript",
+  "name": "transcript-studio",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "export": "node scripts/export.mjs",
     "fixture:video": "node scripts/make-fixture.mjs",
     "fixture:json": "node scripts/prepare-fixture.mjs",
-    "test:skill": "python -m unittest discover docs/skills/video-transcript-paragraphs/tests -v",
+    "test:skill": "python -m unittest discover docs/skills/transcript-studio-paragraphs/tests -v",
     "test:all": "npm run test && npm run test:skill",
     "verify": "npm run typecheck && npm run build && npm run test && npm run test:skill"
   },

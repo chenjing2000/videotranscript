@@ -5,3 +5,5 @@ export * from './style-presets';
 
 export * from './player-shortcuts';
 export * from './media';
+
+export * from './media-diagnostics';

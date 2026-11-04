@@ -19,6 +19,7 @@ internal sealed class ReaderWindow : Window
     private Source? source;
     private bool exporting;
     private bool initialLayoutApplied;
+    private LocalMediaServer? mediaServer;
 
     private sealed record Source(string Media, string Transcript, string Fingerprint, string Project, string MediaKind);
 
@@ -58,6 +59,8 @@ internal sealed class ReaderWindow : Window
             browser.NavigationStarting += (_, e) => e.Cancel = e.Uri != AppUrl;
             browser.NewWindowRequested += (_, e) => e.Handled = true;
             browser.WebMessageReceived += Receive;
+            // Register the media request handler before the page is first loaded.
+            mediaServer = new LocalMediaServer(browser);
             browser.Navigate(AppUrl);
         }
         catch (Exception error)
@@ -156,7 +159,7 @@ internal sealed class ReaderWindow : Window
             if (media != null) { mediaKind = ext is ".mp3" or ".wav" ? "audio" : "video"; break; }
         }
         if (media == null || mediaKind == null)
-            throw new FileNotFoundException($"未找到与 {filename} 同名的媒体文件（已查找 MP4、MKV、MP3、WAV）。");
+            throw new FileNotFoundException($"未找到同名媒体。字幕：{filename}；所在目录：{folder}；尝试查找：{string.Join("、", new[] { ".mp4", ".mkv", ".mp3", ".wav" }.Select(ext => stem + ext))}。请核对文件名。");
 
         var bytes = File.ReadAllBytes(subtitle);
         var transcript = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
@@ -172,9 +175,8 @@ internal sealed class ReaderWindow : Window
         }
         var fingerprint = Convert.ToHexString(SHA256.HashData(bytes));
         var projectPath = Path.Combine(folder, ".transcript-studio", "projects", stem + ".project.json");
-        const string mediaHost = "media.transcript-studio.local";
-        view.CoreWebView2.SetVirtualHostNameToFolderMapping(mediaHost, folder, CoreWebView2HostResourceAccessKind.Allow);
-        var mediaUrl = $"https://{mediaHost}/{Uri.EscapeDataString(Path.GetFileName(media))}";
+        // A per-file URL with HTTP Range support replaces the late folder mapping.
+        var mediaUrl = (mediaServer ?? throw new InvalidOperationException("媒体服务未初始化。")).Select(media);
         source = new Source(media, subtitle, fingerprint, projectPath, mediaKind);
         Send(new
         {
@@ -190,9 +192,22 @@ internal sealed class ReaderWindow : Window
         if (!project.TryGetProperty("format", out var projectFormat) || projectFormat.GetString() != "transcript-studio-project" ||
             !project.TryGetProperty("schemaVersion", out var schema) || schema.ValueKind != JsonValueKind.Number || schema.GetInt32() != 2)
             throw new InvalidOperationException("不支持的工程版本：必须为 Transcript Studio Project v2。");
-        if (project.GetProperty("source").GetProperty("subtitleSha256").GetString() != current.Fingerprint ||
+        if (!project.TryGetProperty("source", out var projectSource) ||
+            projectSource.ValueKind != JsonValueKind.Object ||
+            !projectSource.TryGetProperty("videoName", out var mediaName) ||
+            mediaName.ValueKind != JsonValueKind.String ||
+            !string.Equals(mediaName.GetString(), Path.GetFileName(current.Media), StringComparison.OrdinalIgnoreCase) ||
+            !projectSource.TryGetProperty("subtitleName", out var subtitleName) ||
+            subtitleName.ValueKind != JsonValueKind.String ||
+            !string.Equals(subtitleName.GetString(), Path.GetFileName(current.Transcript), StringComparison.OrdinalIgnoreCase) ||
+            !projectSource.TryGetProperty("subtitleSha256", out var sha) ||
+            sha.ValueKind != JsonValueKind.String ||
+            !string.Equals(sha.GetString(), current.Fingerprint, StringComparison.OrdinalIgnoreCase) ||
             Fingerprint(current.Transcript) != current.Fingerprint)
-            throw new InvalidOperationException("源字幕已变化，请重新打开素材。");
+            throw new InvalidOperationException("工程来源与当前媒体或字幕不匹配，请重新打开素材。");
+        if (project.TryGetProperty("mediaKind", out var mediaKind) &&
+            (mediaKind.ValueKind != JsonValueKind.String || mediaKind.GetString() != current.MediaKind))
+            throw new InvalidOperationException("工程媒体类型与当前文件不匹配。");
         return current;
     }
 

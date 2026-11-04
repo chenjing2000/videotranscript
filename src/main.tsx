@@ -2,7 +2,7 @@ import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ReaderCanvas} from './ui/ReaderCanvas';
 import {StyleSettings} from './ui/StyleSettings';
-import {parseTranscriptStudio,applyOverrides,createProject,updateWord,saveProjectView,validateProject,paginate,measureWithCanvas,DEFAULT_STYLE,normalizeProjectStyle,WIDTH,HEIGHT,validCanvas,transcriptStem,selectCompanion} from './core';
+import {parseTranscriptStudio,applyOverrides,createProject,updateWord,saveProjectView,validateProject,paginate,measureWithCanvas,DEFAULT_STYLE,normalizeProjectStyle,WIDTH,HEIGHT,validCanvas,transcriptStem,selectCompanion,previewEditorFontSize,provisionalVideoHeight,describeMediaError,missingCompanionMessage} from './core';
 import type {Word,Project,TranscriptStudioInput} from './core';
 import {resolvePlayerShortcut} from './core/player-shortcuts';
 import './style.css';
@@ -26,7 +26,7 @@ function Icon({name}:{name:'settings'|'save'|'import'|'export'|'play'|'pause'|'s
 }
 function App(){
  const [mediaUrl,setMediaUrl]=useState('');const [mediaName,setMediaName]=useState('');const [kind,setKind]=useState<'video'|'audio'>('video');
- const [videoRatio,setVideoRatio]=useState(0);const [words,setWords]=useState<Word[]>([]);const [project,setProject]=useState<Project|null>(null);
+ const [videoRatio,setVideoRatio]=useState<number|null>(null);const [mediaState,setMediaState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const [words,setWords]=useState<Word[]>([]);const [project,setProject]=useState<Project|null>(null);
  const [time,setTime]=useState(0);const [duration,setDuration]=useState(0);
  const [selected,setSelected]=useState<string|null>(null);const [edit,setEdit]=useState<{id:string;text:string}|null>(null);
  const [dirty,setDirty]=useState(false);const [playing,setPlaying]=useState(false);const [exporting,setExporting]=useState(false);const [exportStatus,setExportStatus]=useState('');
@@ -39,7 +39,8 @@ function App(){
  const geometry=getWorkspaceLayout(viewport.width,viewport.height,canvasWidth,canvasHeight);
  const scale=geometry.previewWidth/canvasWidth;
  useEffect(()=>{desktop?.postMessage({kind:'layout',minimumClientWidth:geometry.minimumClientWidth,minimumClientHeight:Math.ceil(geometry.minimumClientHeight),outputWidth:canvasWidth,outputHeight:canvasHeight})},[canvasWidth,canvasHeight,geometry.minimumClientWidth,geometry.minimumClientHeight]);
- const mediaHeight=kind==='video'?Math.round(canvasWidth*videoRatio):0;
+ const mediaHeight=kind==='video'&&mediaUrl?provisionalVideoHeight(canvasWidth,canvasHeight,videoRatio):0;
+ const editorFontSize=previewEditorFontSize((project?.style??DEFAULT_STYLE).fontSize,geometry.previewWidth,canvasWidth);
  const style=project?.style??DEFAULT_STYLE;
  const notify=(text:string,error=false)=>{
   const id=nextNoticeId.current++;setNotices(prev=>[...prev,{id,text,error}]);
@@ -53,14 +54,14 @@ function App(){
  const openPicker=()=>{if(!exporting)inputRef.current?.click()};
  const doSave=()=>{if(!project)return notify('尚未打开标准字幕',true);const p=saveProjectView(project,words);if(desktop){desktop.postMessage({kind:'save',project:p});return}
   const blob=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=`${mediaName.replace(/\.[^.]+$/,'')}.project.json`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);setDirty(false);notify('工程 JSON 已保存')};
- const doExport=()=>{if(!desktop){notify('请使用 Windows 桌面版导出 MP4',true);return}if(!project||!mediaUrl||!duration||!plan){notify('尚未载入可导出的媒体和字幕，或画布无法排版',true);return}setExporting(true);setExportStatus('正在准备导出…');desktop.postMessage({kind:'export',project:saveProjectView(project,words),duration,videoHeight:mediaHeight,pagePlan:plan})};
+ const doExport=()=>{if(mediaState!=='ready'){notify(`媒体尚未就绪：${mediaName||'未选择媒体'}`,true);return}if(!desktop){notify('请使用 Windows 桌面版导出 MP4',true);return}if(!project||!mediaUrl||!duration||!plan){notify('尚未载入可导出的媒体和字幕，或画布无法排版',true);return}setExporting(true);setExportStatus('正在准备导出…');desktop.postMessage({kind:'export',project:saveProjectView(project,words),duration,videoHeight:mediaHeight,pagePlan:plan})};
  const applyPair=(data:Extract<DesktopMessage,{kind:'pair'}>)=>{
   try{const input=JSON.parse(data.transcript) as TranscriptStudioInput,parsed=parseTranscriptStudio(input);sourceRef.current=input;
    const next=createProject(data.mediaName,data.subtitleName,parsed.words);next.source.subtitleSha256=data.fingerprint;next.mediaKind=data.mediaKind;
    let current=next,currentWords=parsed.words;
    if(data.project){try{const saved:unknown=JSON.parse(data.project);if(!validateProject(saved)||saved.source.subtitleSha256!==data.fingerprint)throw Error('旧工程或字幕指纹不匹配');current=normalizeProjectStyle(saved);currentWords=applyOverrides(parsed,current).words}catch(e){notify(`未恢复工程：${String(e)}`,true)}}
-   setMediaUrl(data.mediaUrl);setMediaName(data.mediaName);setKind(data.mediaKind);setProject(current);setWords(currentWords);setSelected(null);setEdit(null);setDirty(false);setDuration(0);setVideoRatio(0);setTime(0);setPlaying(false);
-   notify(`已载入 ${parsed.words.length} 个单词 · ${data.mediaKind==='audio'?'纯音频':'视频'}模式`);
+   setMediaUrl(data.mediaUrl);setMediaName(data.mediaName);setKind(data.mediaKind);setProject(current);setWords(currentWords);setSelected(null);setEdit(null);setDirty(false);setDuration(0);setVideoRatio(null);setMediaState('loading');setTime(0);setPlaying(false);
+   notify(`已找到媒体：${data.mediaName}（${data.mediaKind==='audio'?'音频':'视频'}模式），正在读取媒体信息；${parsed.words.length} 个单词`);
   }catch(e){notify(`字幕读取失败：${String(e)}`,true)}
  };
  useEffect(()=>{const receive=({data}:MessageEvent<DesktopMessage>)=>{if(data.kind==='pair')applyPair(data);else if(data.kind==='saved'){setDirty(false);notify(data.message)}else if(data.kind==='status'){setExporting(data.busy);setExportStatus(data.busy?data.message:'');if(!data.busy)notify(data.message,!!data.error)}};desktop?.addEventListener('message',receive);return()=>desktop?.removeEventListener('message',receive)},[]);
@@ -70,12 +71,28 @@ function App(){
    const picker=(window as Window&{showDirectoryPicker?:()=>Promise<FileSystemDirectoryHandle>}).showDirectoryPicker;
    if(!picker)throw Error('浏览器不能自动访问同目录媒体；请使用 Windows 桌面版。');
    const directory=await picker();const names:string[]=[];for await(const [name] of (directory as any).entries())names.push(name);
-   const match=selectCompanion(file.name,names);if(!match)throw Error('找不到同名 MP4 / MKV / MP3 / WAV');
+   const match=selectCompanion(file.name,names);if(!match)throw Error(missingCompanionMessage(stem));
    const handle=await directory.getFileHandle(match.name),media=await handle.getFile(),url=URL.createObjectURL(media);
    const next=createProject(match.name,file.name,parsed.words);next.mediaKind=match.kind;
-   setMediaUrl(old=>{if(old.startsWith('blob:'))URL.revokeObjectURL(old);return url});setMediaName(match.name);setKind(match.kind);setProject(next);setWords(parsed.words);setDirty(false);setVideoRatio(0);setDuration(0);sourceRef.current=input;notify(`已打开 ${stem} · ${match.kind}`);
+   setMediaUrl(old=>{if(old.startsWith('blob:'))URL.revokeObjectURL(old);return url});setMediaName(match.name);setKind(match.kind);setProject(next);setWords(parsed.words);setDirty(false);setVideoRatio(null);setMediaState('loading');setDuration(0);sourceRef.current=input;notify(`已找到媒体：${match.name}（${match.kind==='audio'?'音频':'视频'}模式），正在读取媒体信息`);
   }catch(e){notify(`导入失败：${String(e)}`,true)}
  }
+ const onMediaReady=(element:HTMLMediaElement)=>{
+  if(!Number.isFinite(element.duration)||element.duration<=0){setMediaState('error');notify(`无法读取媒体时长：${mediaName}`,true);return}
+  if(kind==='video'){
+   const video=element as HTMLVideoElement;
+   if(video.videoWidth<=0||video.videoHeight<=0){setMediaState('error');notify(`视频元数据无效（宽高为 0）：${mediaName}`,true);return}
+   const ratio=video.videoHeight/video.videoWidth;
+   if(Math.round(canvasWidth*ratio)>=canvasHeight){setMediaState('error');notify(`视频画面占满字幕画布：${mediaName}。请调整输出尺寸。`,true);return}
+   setVideoRatio(ratio);
+  }
+  setDuration(element.duration);setMediaState('ready');
+  notify(`媒体已就绪：${mediaName}（${kind==='audio'?'音频':'视频'}，${element.duration.toFixed(1)} 秒）`);
+ };
+ const onMediaFailed=(element:HTMLMediaElement)=>{
+  setMediaState('error');setPlaying(false);
+  notify(`无法播放媒体：${mediaName||'未知文件'}。${describeMediaError(element.error?.code)}。请核对文件名与内部编码。`,true);
+ };
  const refresh=(newWords:Word[])=>{setWords(newWords);setDirty(true)};
  const styleChange=(newStyle:typeof style)=>{if(!project)return;mediaRef.current?.pause();setProject({...project,style:newStyle});setDirty(true)};
  const changeCanvas=(axis:'width'|'height',value:number)=>{if(!project)return;const c={...project.canvas,[axis]:value};if(!validCanvas(c.width,c.height))return;mediaRef.current?.pause();setProject({...project,canvas:c});setDirty(true)};
@@ -94,16 +111,16 @@ function App(){
    <section className="preview" aria-label="阅读画布预览" style={{width:geometry.frameWidth,height:geometry.frameHeight}}>
     <div className="preview-stage" style={{width:geometry.previewWidth,height:geometry.previewHeight}}>
      <div className="scaled-holder" style={{width:geometry.previewWidth,height:geometry.previewHeight}}><div className="canvas-frame" style={{width:canvasWidth,height:canvasHeight,transform:`scale(${scale})`}}>
-     <ReaderCanvas words={words} style={style} time={time} canvasWidth={canvasWidth} canvasHeight={canvasHeight} videoHeight={mediaHeight} pagePlan={plan} video={kind==='video'?<video ref={el=>{mediaRef.current=el}} src={mediaUrl||undefined} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>setPlaying(false)} onError={()=>notify('视频解码失败，请检查 MKV/MP4 的内部编码格式',true)} onLoadedMetadata={e=>{const el=e.currentTarget;setVideoRatio(el.videoHeight/el.videoWidth);setDuration(el.duration)}} style={{width:canvasWidth,height:mediaHeight,objectFit:'fill'}}/>:null}/>
+     <ReaderCanvas words={words} style={style} time={time} canvasWidth={canvasWidth} canvasHeight={canvasHeight} videoHeight={mediaHeight} pagePlan={plan} video={kind==='video'&&mediaUrl?<><video key={mediaUrl} ref={el=>{mediaRef.current=el}} src={mediaUrl} preload="metadata" onLoadStart={()=>setMediaState('loading')} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>setPlaying(false)} onError={e=>onMediaFailed(e.currentTarget)} onLoadedMetadata={e=>onMediaReady(e.currentTarget)} style={{width:canvasWidth,height:mediaHeight,objectFit:'fill',display:'block'}}/>{mediaState!=='ready'&&<div className="media-state-overlay" role={mediaState==='error'?'alert':'status'}>{mediaState==='loading'?'正在加载视频：':'视频尚未就绪：'}{mediaName}</div>}</>:null}/>
      </div></div>
     </div>
-   {kind==='audio'&&<audio ref={el=>{mediaRef.current=el}} src={mediaUrl||undefined} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>setPlaying(false)} onLoadedMetadata={e=>setDuration(e.currentTarget.duration)} onError={()=>notify('音频文件无法解码',true)}/>}
+   {kind==='audio'&&mediaUrl&&<audio key={mediaUrl} ref={el=>{mediaRef.current=el}} src={mediaUrl} preload="metadata" onLoadStart={()=>setMediaState('loading')} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>setPlaying(false)} onLoadedMetadata={e=>onMediaReady(e.currentTarget)} onError={e=>onMediaFailed(e.currentTarget)}/>}
    <div className="transport" style={{width:geometry.previewWidth}}>
     <span className="transport-time">{timeLabel(time)} / {timeLabel(duration)}</span>
     <div className="transport-row"><input aria-label="进度" type="range" min={0} max={duration||1} step="0.01" value={time} onChange={e=>seek(Number(e.target.value))}/>{iconButton(playing?'pause':'play',playing?'暂停 Space':'播放 Space',toggle)}{iconButton('stop','停止 X',stop)}</div>
    </div></section>
-   <aside><div className="toolbar"><span className="app-label">Transcript Studio {dirty?'●':''}</span>{iconButton('settings','设置',()=>setSettingsOpen(true))}{iconButton('save','保存工程 Ctrl+S',doSave,!project||exporting)}{iconButton('import','导入 JSON Ctrl+O',openPicker,exporting)}{iconButton('export','导出 MP4',doExport,!project||exporting)}</div>
-    <div className="panel">{exportStatus&&<div className="export-status" role="status">{exportStatus}</div>}<h3>字幕</h3><div className="transcript" style={{fontFamily:style.fontFamily,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight}}>
+   <aside><div className="toolbar"><span className="app-label">Transcript Studio {dirty?'●':''}</span>{iconButton('settings','设置',()=>setSettingsOpen(true))}{iconButton('save','保存工程 Ctrl+S',doSave,!project||exporting)}{iconButton('import',mediaName?`导入 JSON Ctrl+O · 当前媒体：${mediaName}`:'导入 JSON Ctrl+O',openPicker,exporting)}{iconButton('export','导出 MP4',doExport,!project||exporting)}</div>
+    <div className="panel">{exportStatus&&<div className="export-status" role="status">{exportStatus}</div>}<h3>字幕</h3><div className="transcript" style={{fontFamily:style.fontFamily,fontSize:editorFontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,color:style.textColor}}>
      {words.map(w=><React.Fragment key={w.id}>{w.hidden?null:edit?.id===w.id?<input className="word-edit" style={{font:'inherit'}} autoFocus value={edit.text} onChange={e=>setEdit({...edit,text:e.target.value})} onKeyDown={e=>{if(e.key==='Escape')setEdit(null);if(e.key==='Enter'){try{refresh(updateWord(words,w.id,edit.text));setEdit(null)}catch(err){notify(String(err),true)}}}}/>:<span className={selected===w.id?'selected':''} title={`${w.start.toFixed(3)}–${w.end.toFixed(3)}`} onClick={()=>setSelected(w.id)} onDoubleClick={()=>{mediaRef.current?.pause();setEdit({id:w.id,text:w.display})}}>{w.display}</span>}{' '}{w.breakParagraph?<div className="paragraph-break"/>:null}</React.Fragment>)}
     </div>{selected&&<div className="word-tools">{(()=>{const w=words.find(x=>x.id===selected);if(!w)return null;return <><strong>{w.original}</strong><span>{w.start.toFixed(3)}–{w.end.toFixed(3)}</span><button onClick={()=>{seek(w.start);mediaRef.current?.pause()}}>定位</button><button onClick={()=>refresh(words.map(x=>x.id===w.id?{...x,breakParagraph:!x.breakParagraph}:x))}>切换段落</button><button onClick={()=>refresh(words.map(x=>x.id===w.id?{...x,hidden:!x.hidden}:x))}>隐藏</button><button onClick={()=>refresh(updateWord(words,w.id,w.original))}>恢复</button></>})()}</div>}</div>
     <div className="notices" role="status">{notices.filter(n=>n.error || notices.slice(-3).includes(n)).map(n=><div key={n.id} className={`notice ${n.error?'error':''}`} role={n.error?'alert':'status'}><span>{n.text}</span><button aria-label="关闭消息" title="关闭" onClick={()=>setNotices(a=>a.filter(x=>x.id!==n.id))}><Icon name="close"/></button></div>)}</div>

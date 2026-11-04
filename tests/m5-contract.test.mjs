@@ -53,3 +53,15 @@ test('M5: malformed or reversed source word timestamps rejected',()=>{
  const a=clone(data);a.segments[3].words[0].start=-10;reject(a,/时间/);
  const b=clone(data);b.segments[3].words[0].word='two tokens';reject(b,/单词/);
 });
+test('Code review: saved project rejects malformed style, media kind and word edits',()=>{
+ const words=okay(data).words;
+ const p=core.createProject('lesson.mp4','lesson.transcript-studio.json',words);
+ assert.equal(core.validateProject(p),true);
+ assert.equal(core.validateProject({...p,mediaKind:'image'}),false);
+ assert.equal(core.validateProject({...p,style:{...p.style,fontSize:0}}),false);
+ assert.equal(core.validateProject({...p,style:{...p.style,paddingX:-3}}),false);
+ assert.equal(core.validateProject({...p,style:{...p.style,textColor:'red'}}),false);
+ assert.equal(core.validateProject({...p,export:{fps:25,quality:'standard'}}),false);
+ assert.equal(core.validateProject({...p,overrides:{s1w2:{breakParagraph:'yes'}}}),false);
+ assert.equal(core.validateProject({...p,source:{...p.source,subtitleSha256:'invalid'}}),false);
+});

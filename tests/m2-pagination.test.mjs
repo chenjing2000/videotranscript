@@ -80,7 +80,7 @@ test('M2: parses presegmented paragraph metadata without changing source time',(
 test('M5: normalize missing optional style fields in a v2 project',()=>{
  const p=core.createProject('test.mp4','test.json',words(['one.']));delete p.style.firstLineIndentCh;delete p.style.fontWeight;
  p.style.fontSize=44;const migrated=core.normalizeProjectStyle(p);
- assert.equal(migrated.style.fontSize,44);assert.equal(migrated.style.firstLineIndentCh,4);assert.equal(migrated.style.fontWeight,400);
+ assert.equal(migrated.style.fontSize,44);assert.equal(migrated.style.firstLineIndentEm,2);assert.equal(migrated.style.fontWeight,400);
 });
 
 test('M2: removing source paragraph break survives project save/reload',()=>{

@@ -3,6 +3,7 @@ dist/
 .cache/
 *.log
 .tmp/
+.tmp-core/
 exports/
 *.mp4
 !fixtures/README.md
@@ -13,9 +14,7 @@ exports/
 /desktop/bin/
 /desktop/obj/
 
-# Generated TypeScript test output
-.tmp-core/
-
-# Python generated test artifacts
 __pycache__/
 *.pyc
+
+video/*

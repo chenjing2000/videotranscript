@@ -44,3 +44,10 @@ All Git commit messages must be in **English**; prefer Conventional Commits such
 ## Responsive preview (M6 update)
 
 The left canvas preview keeps the project output aspect ratio and is never less than 360 DIP wide. A 3-DIP inset frames both sides and the top; the progress controls touch the bottom of the preview, with 3 DIP below. The right transcript editor takes the remaining window width (minimum 240 DIP). The volume slider has been removed from the transport. Change the final exported MP4 width and height in **Settings → 输出视频尺寸**; resizing the app window changes preview scale only. See `docs/M6_IMPLEMENTATION_AND_VALIDATION.md` for the exact geometry and Windows acceptance tests.
+
+
+## M6.5 configuration and framework-dependent deployment
+
+Portable application preferences: `voicetranscript.settings.json` next to `TranscriptStudio.exe` (created on first launch). Each video uses `<video-dir>/.transcript-studio/projects/<video-stem>/project.settings.json`.
+The right editor font family/size/colors are independent of video typography; standard left-font and output defaults are stored globally but existing projects retain their own layouts.
+Windows deployment: `npm.cmd run verify` then `dotnet publish desktop/TranscriptStudio.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/wpf`. Distribute the resulting EXE after verifying the single-file output. The user installs .NET Desktop Runtime 10 and WebView2; Node.js 22+ is required only to export MP4. No system prerequisites are automatically installed by the app. On the first export, the program can prepare locked npm packages and Remotion's rendering browser with consent. See `docs/M65_SETTINGS_AND_DEPLOYMENT.md`.

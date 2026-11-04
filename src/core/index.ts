@@ -7,3 +7,5 @@ export * from './player-shortcuts';
 export * from './media';
 
 export * from './media-diagnostics';
+
+export * from './app-settings';

@@ -9,9 +9,9 @@ const EPS=1e-6;
 const isSentenceEnd=(s:string)=>/[.!?][)'"”’]*$/u.test(s.trim());
 interface RawRow extends Omit<PageRow,'top'> {}
 export function paginate(words:Word[],style:ReadingStyle,viewportWidth:number,viewportHeight:number,measure:Measure):PagePlan{
- const numeric=[style.fontSize,style.lineHeight,style.paragraphGap,style.paddingX,style.paddingY,style.firstLineIndentCh,viewportWidth,viewportHeight];
+ const numeric=[style.fontSize,style.lineHeight,style.paragraphGap,style.paddingX,style.paddingY,style.firstLineIndentEm??style.firstLineIndentCh??0,viewportWidth,viewportHeight];
  if(numeric.some(x=>!Number.isFinite(x)))throw new Error('排版参数必须为有限数值');
- if(style.fontSize<=0||style.lineHeight<=0||style.paddingX<0||style.paddingY<0||style.paragraphGap<0||style.firstLineIndentCh<0)throw new Error('无效的排版参数');
+ if(style.fontSize<=0||style.lineHeight<=0||style.paddingX<0||style.paddingY<0||style.paragraphGap<0||(style.firstLineIndentEm??style.firstLineIndentCh??0)<0)throw new Error('无效的排版参数');
  const availableWidth=viewportWidth-2*style.paddingX,availableHeight=viewportHeight-2*style.paddingY;
  const height=style.fontSize*style.lineHeight;
  if(availableWidth<=0||availableHeight+EPS<height)throw new Error('阅读区域不足以容纳一行文字');
@@ -32,7 +32,7 @@ export function paginate(words:Word[],style:ReadingStyle,viewportWidth:number,vi
   const w=visible[i];if(!Number.isFinite(w.start)||!Number.isFinite(w.end)||w.end<=w.start)throw new Error(`无效时间戳：${w.id}`);
   if(i>0&&w.start<visible[i-1].start)warnings.push(`单词时间倒序：${w.id}`);
  }
- const indent=style.firstLineIndentCh*measure('0'), spaceWidth=measure(' ');
+ const indent=style.firstLineIndentCh!==undefined?style.firstLineIndentCh*measure('0'):(style.firstLineIndentEm??0)*style.fontSize, spaceWidth=measure(' ');
  const raw:RawRow[]=[];let start=0,width=0,atParagraphStart=true,positions:PageWord[]=[];
  function flush(end:number,para:boolean){
   if(end<start)return;

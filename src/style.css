@@ -106,3 +106,88 @@ html,body,#root{height:100%;min-width:0;min-height:0}
 .media-state-overlay{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;
   padding:24px;background:#172536dd;color:#fff;font-size:26px;text-align:center;overflow-wrap:anywhere;pointer-events:none}
 .transcript .word-edit{font-size:inherit;line-height:inherit;font-weight:inherit;font-family:inherit;max-width:min(100%,18em)}
+
+/* M6.5: shared four-column setting rows; each label stays on the same row as its value. */
+/* M6.5 compact modal: 384 DIP outer width, balanced 17/18 DIP side margins. */
+.settings-dialog{width:min(384px,calc(100vw - 40px))}
+.settings-body{padding:14px 17px 24px}
+.m65-settings{font-family:Arial,"Microsoft YaHei",sans-serif}
+.m65-group{border-bottom:1px solid #dce3e9;padding:10px 0 14px}
+.m65-group h4{font-size:16px;line-height:24px;font-weight:700;margin:0 0 10px}
+/* Column starts measured from the settings content left edge: 0, 64, 190, 254 DIP. */
+.m65-grid{display:grid;grid-template-columns:64px 126px 64px 96px;column-gap:0;row-gap:10px;align-items:center}
+.m65-grid label{font-size:14px;font-weight:400;text-align:left;white-space:nowrap}
+.m65-value{min-width:0;display:flex;align-items:center;gap:5px}
+.m65-value input,.m65-value select{height:34px;min-width:0;width:70px;flex:0 0 70px;font-size:14px;font-weight:400;text-align:center;text-align-last:center;border:1px solid #b9c5ce;border-radius:6px;padding:4px 7px;background:white;color:#253949}
+.m65-value-align select{width:90px;flex:0 0 90px}
+.m65-unit{font-size:14px;flex:none}
+.m65-swatch{width:20px;height:20px;border:1px solid #8797a1;border-radius:50%;flex:0 0 20px}
+.m65-note{font-size:12px;color:#627487;line-height:1.55;margin:12px 0 0}
+.transcript{padding:8px;border-radius:4px;min-height:100%;}
+
+/* M6.6 inline word editor and non-layout-shifting floating context tools. */
+.transcript .word-edit{
+ display:inline-block;vertical-align:baseline;box-sizing:border-box;min-width:24px;
+ max-width:100%;height:auto;line-height:inherit;margin:0;padding:0 3px;
+ border:1px solid #aab6c0;border-radius:4px;background:#fff;
+ outline:none;box-shadow:none;text-align:left;white-space:nowrap;
+}
+.transcript .word-edit:focus,.transcript .word-edit:focus-visible{
+ border:1px solid #ab1d22;outline:none;box-shadow:none;
+}
+.transcript .transcript-word{cursor:text}
+.panel{padding-bottom:16px}
+.word-tools{
+ position:absolute;z-index:15;bottom:12px;left:50%;transform:translateX(-50%) translateY(0);
+ width:max-content;max-width:calc(100% - 24px);display:flex;flex-direction:column;
+ align-items:center;gap:6px;flex-wrap:nowrap;padding:8px 10px;
+ border:1px solid #ced9df;border-radius:8px;background:#eef4f6;
+ box-shadow:0 3px 14px #0002;opacity:1;transition:transform 250ms ease,opacity 250ms ease;
+ font-family:Arial,"Microsoft YaHei",sans-serif;font-size:14px;line-height:1.4;
+}
+.word-tools.word-tools-leaving{opacity:0;transform:translateX(-50%) translateY(12px);pointer-events:none}
+.word-tools-title{font-size:14px;font-weight:400;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.word-tools-actions{display:flex;align-items:center;justify-content:center;gap:6px}
+.word-tools-actions button{font-size:14px;font-weight:400;line-height:20px;padding:4px 8px;white-space:nowrap}
+.word-tools-actions button:disabled{opacity:.5;cursor:default}
+
+
+/* M6.7: Windows 11 Fluent-like dependency confirmation / progress dialogs. */
+.dependency-backdrop{z-index:130;background:rgba(24,37,49,.42);backdrop-filter:blur(2px)}
+.dependency-dialog{width:min(460px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;background:#fff;border:1px solid #d9e0e5;border-radius:12px;box-shadow:0 14px 50px #14202d38;color:#243244;font-family:'Segoe UI','Microsoft YaHei',Arial,sans-serif}
+.dependency-dialog-head{display:flex;align-items:center;gap:12px;padding:20px 24px 16px;border-bottom:1px solid #e6ebef}
+.dependency-dialog-icon{flex:none;width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:#385c6c;background:#edf5f8;border-radius:10px}
+.dependency-dialog-titles{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.dependency-dialog-titles strong{font-size:16px;font-weight:600;line-height:1.4}
+.dependency-dialog-titles span{font-size:12px;color:#6f7f8b}
+.dependency-close{flex:none;align-self:flex-start;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;padding:4px;color:#60717c;border-radius:6px}
+.dependency-close:hover{background:#eff3f5}.dependency-close svg{width:17px;height:17px}
+.dependency-dialog-body{padding:18px 24px 8px;font-size:14px;line-height:1.5}
+.dependency-heading{font-size:14px;font-weight:600}
+.dependency-dialog-body p{margin:9px 0 14px;overflow-wrap:anywhere}
+.dependency-tip{display:flex;align-items:flex-start;gap:9px;font-size:13px;line-height:1.5;color:#617380;margin:0 0 14px}
+.dependency-tip>span:first-child{font-size:17px;line-height:1.2}
+.dependency-dialog-actions{display:flex;justify-content:flex-end;gap:8px;padding:14px 24px 20px}
+.dependency-btn{font-size:14px;font-weight:400;min-width:86px;height:34px;padding:5px 14px;border:1px solid #c5d2d9;border-radius:6px;background:#fff;color:#293e4b}
+.dependency-btn:hover{background:#eff4f7}.dependency-primary{background:#D3E5EB;border-color:#c5dce5;font-weight:500}
+.dependency-primary:hover{background:#c3dde7}.dependency-btn:focus-visible,.dependency-close:focus-visible{outline:2px solid #007175;outline-offset:2px}
+.dependency-progress-track{position:relative;height:6px;background:#e7eef2;overflow:hidden;border-radius:99px;margin:20px 0 12px}
+.dependency-progress-track span{position:absolute;top:0;bottom:0;width:35%;background:#8dbbcb;border-radius:99px;animation:dependency-indeterminate 1.5s ease-in-out infinite}
+.dependency-fine-print{font-size:12px;color:#6f7f8b}.dependency-error-text{max-height:140px;overflow:auto;color:#8b3337}
+@keyframes dependency-indeterminate{0%{left:-35%}100%{left:100%}}
+@media(prefers-reduced-motion:reduce){.dependency-progress-track span{animation:none;left:0;width:100%}}
+
+/* M6.9: draggable settings panel; size and position are viewport-clamped by TS. */
+.settings-backdrop{display:block}
+.settings-backdrop .settings-dialog{position:absolute;max-height:none;min-height:0;min-width:0}
+.settings-backdrop .settings-head{flex:none;touch-action:none;user-select:none;cursor:grab}
+.settings-backdrop .settings-head:active{cursor:grabbing}
+.settings-backdrop .settings-head .circle-button{cursor:pointer;touch-action:auto}
+.settings-backdrop .settings-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+.settings-backdrop .m65-settings{min-width:350px}
+/* Keep transport grid and its interactive range unchanged. */
+.transport-time{font-size:12px;position:relative;top:3px;pointer-events:none}
+
+/* M6.10: the panel width is measured once from its intrinsic fixed-column content.
+   Keep horizontal scrolling only as a fallback when the main window is too narrow. */
+.settings-backdrop .settings-body{box-sizing:border-box}

@@ -8,10 +8,25 @@
     <AssemblyName>TranscriptStudio</AssemblyName>
     <RootNamespace>TranscriptStudio</RootNamespace>
     <ApplicationIcon>assets/app.ico</ApplicationIcon>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
-    <Content Include="../dist/index.html" Link="ui/index.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../dist/assets/**/*" Link="ui/assets/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="../dist/index.html" LogicalName="TSUI/index.html" />
+    <EmbeddedResource Include="../dist/app.ico" LogicalName="TSUI/app.ico" />
+    <EmbeddedResource Include="../dist/assets/**/*" LogicalName="TSUI/assets/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../package.json" LogicalName="TSRUNTIME/package.json" />
+    <EmbeddedResource Include="../package-lock.json" LogicalName="TSRUNTIME/package-lock.json" />
+    <EmbeddedResource Include="../tsconfig.json" LogicalName="TSRUNTIME/tsconfig.json" />
+    <EmbeddedResource Include="../scripts/ensure-browser.mjs" LogicalName="TSRUNTIME/scripts/ensure-browser.mjs" />
+    <EmbeddedResource Include="../scripts/export.mjs" LogicalName="TSRUNTIME/scripts/export.mjs" />
+    <EmbeddedResource Include="../scripts/transcript-studio-contract.mjs" LogicalName="TSRUNTIME/scripts/transcript-studio-contract.mjs" />
+    <EmbeddedResource Include="../src/**/*" LogicalName="TSRUNTIME/src/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

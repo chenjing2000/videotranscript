@@ -6,7 +6,7 @@ WhisperX raw JSON is only a source for the Skill; the app accepts `<video-stem>.
 The parser assigns internal stable IDs `s<segmentIndex>w<wordIndex>` (indices zero-based). Each word has immutable `original`, `start`, `end`, `score`, with editable `display`, `hidden`, `breakParagraph`. `sourceBreakParagraph` and `sourceDisplay` are runtime baselines; they are not input fields.
 
 ## Project
-Persist under `<video-dir>/.transcript-studio/projects/<stem>.project.json`. Strict project schema:
+Persist under `<video-dir>/.transcript-studio/projects/<stem>/project.settings.json`. Strict project schema:
 
 ```json
 {

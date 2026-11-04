@@ -1,8 +1,11 @@
+> **M4 优先规范（2026-11-04）：** 应用现在只接受 `<视频主名>.evr-transcript.json`，原始 WhisperX `.json` 不再直接加载。段落由 `docs/english-transcript-paragraphs/SKILL.md` 标准化；详见 [`M4_FORMAT_MIGRATION.md`](M4_FORMAT_MIGRATION.md)。下文涉及“同名 WhisperX JSON”旧描述视为历史设计，不得覆盖此规则。
+
 # Architecture
 
-- `src/core` pure data + geometry/highlight/scroll; no Tauri/Remotion-specific imports. `buildLayout` accepts injected measure function; `scrollOffset(plan,t)` and `wordProgress(t,...)` pure.
-- `src/ui/ReaderCanvas.tsx` shared presentation; time and video supplied as props. Preview time from HTML `<video>.currentTime` (prototype rAF polling), renderer time from Remotion frame/fps.
-- `src/remotion`: Remotion composition with source video + audio already included; don't add duplicated `<Audio>`. `scripts/export.mjs` bundles composition, inspects media with ffprobe, stages local video, renders H.264, and cleans up.
-- Final Tauri host should handle directory tree, secure file I/O, atomic persistent JSON, subprocess management, filesystem output path, global settings and toast history; prototype UI currently has browser File API and download-based save only.
-- Preview/render parity is an acceptance criterion; canvas text measurement can differ across WebView2/Headless Chrome. Consider a layout manifest precomputed under controlled rendering context and applied to BOTH output paths. Use one code path, fixed font files/metrics, no incidental browser text wrapping.
-- External program locations are global configuration, not embedded inside saved projects. `3rdparty/` is for genuinely needed vendored binaries/resources; npm and Cargo use regular dependency managers.
+- .NET 10 WPF hosts the bundled React/TypeScript interface in WebView2. The host owns source pairing, atomic project writes and backups, and the Node subprocess. The source file selected in WebView2 is played as a local object URL and its path is passed to WPF through the file message API.
+- `src/core` owns transcript parsing, project overrides, geometry, highlighting and scrolling. The preview measures line layout at the logical canvas size. The WPF export job snapshots the current project and that measured layout together.
+- `src/ui/ReaderCanvas.tsx` displays both preview and render. Preview time comes from the video element. Remotion time comes from frame divided by FPS. The shared component builds its scroll plan from the same measured rows. Standalone CLI export without a desktop snapshot measures within its render browser.
+- Remotion's OffthreadVideo decodes the local video and carries its audio. The exporter encodes H.264/AAC and WPF moves the completed file into the per-video exports directory under an unused name.
+- External tool paths belong in global configuration. Dependency managers are npm and NuGet. The broader directory and settings workflows remain specified in the product document.
+
+The original prototype proposed Tauri. The WPF evaluation and M1 report document the selected host and verification.

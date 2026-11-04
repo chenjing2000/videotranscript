@@ -10,15 +10,15 @@ export function buildScrollPlan(layout:Layout,minDuration=.15):ScrollPlan{
  for(let next=1;next<rows.length;next++){
   const nextRow=rows[next];const prior=rows[next-1];
   const goal=clamp(nextRow.bottom-viewportHeight/2,0,maxOffset);
-  // Force bottom alignment by final row start; no blank space from overscroll.
+  // Target bottom alignment at the final row, subject to the minimum duration.
   const desired=next===rows.length-1?maxOffset:goal;
   if(desired<=offset+1e-7)continue;
   const nominalStart=prior.lastEnd;
   const nominalEnd=nextRow.firstStart;
-  const duration=Math.max(minDuration,nominalEnd-nominalStart);
   // No teleports: if a previous animation overlaps, start the next at previous end.
   const start=Math.max(nominalStart,previousEnd);
-  const end=start+duration;
+  // A queued transition uses the remaining silence instead of replaying elapsed time.
+  const end=Math.max(start+minDuration,nominalEnd);
   events.push({start,end,from:offset,to:desired,rowIndex:next});
   offset=desired;previousEnd=end;
   if(offset>=maxOffset-1e-7)break;

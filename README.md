@@ -1,51 +1,36 @@
-# English Video Reader — Core Prototype
+# EVR Transcript v1 — important M4 update
 
-> **Status: architecture/reference implementation, not a finished Windows desktop app.**
-> The TypeScript core test suite passed locally. The React/Vite and Remotion packages could not be installed in the authoring environment (npm registry inaccessible), therefore **the browser UI build and a real Remotion render have not been executed here**. They are implementation candidates requiring validation by Codex on Windows. The synthetic demo MP4 and matching WhisperX-compatible JSON are included in the downloadable archive.
+**Reader now accepts only `<video-stem>.evr-transcript.json` produced and validated by the Skill at [`docs/english-transcript-paragraphs/SKILL.md`](docs/english-transcript-paragraphs/SKILL.md). Raw `<video-stem>.json` is deliberately rejected by the UI, WPF pairing, and the MP4 export CLI.** This is a breaking input format change. Original MP4 and original WhisperX JSON are preserved.
 
-## Intent
+To prepare an input, see [`docs/M4_FORMAT_MIGRATION.md`](docs/M4_FORMAT_MIGRATION.md). The included standardized fixture is an example, not an assertion that the semantic paragraphs have undergone final editorial approval.
 
-A **local-first**, personal Windows English video reader and automatic MP4 maker. A pre-edited MP4 and word-aligned WhisperX JSON are inputs. No speech recognition, clipping, recording, cloud service, database, credits, or title card.
+> M3 更新：默认 Word 式两端对齐、减少分页留白、`npm test` 自动编译。详见 `docs/M3_JUSTIFICATION_AND_PAGE_FILL.md` 和 `M3_APPLY.md`。
 
-Final product: **Tauri 2.x + React + TypeScript + Remotion**, left 1200×1600 reader, right four tabs (**样式 / 字幕 / 素材 / 导出**), word-level edit only on right.
+# English Video Reader — WPF + React + Remotion (M2 静态分页源码版)
 
-## Prototype quick start
+这是基于 Windows WPF PoC 更新的 **M2 静态分页**源码，不是已在 Windows 上运行验证完成的安装包。完整开发/验证要求见 [`HANDOFF.md`](HANDOFF.md)。
 
-Requires Node.js 22+, npm, FFmpeg/ffprobe (for sample generation and duration probing), and internet access to install exact Remotion dependencies. Browser-based prototype uses local File API; **it does not yet have the Tauri directory tree, disk autosave, 6-second toast stack, or GUI-triggered export**.
+- 原生桌面：.NET 10 WPF + WebView2。
+- 阅读及样式：React + TypeScript；静态页面、瞬时切换、按时间逐词线性着色。
+- 导出：Remotion 4.0.539，1200×1600、默认 30 fps，保留源视频原声。
+- 输入：WhisperX JSON（支持语义段落标记），工程保存到 `.evr/projects/`，导出到 `exports/`。
 
-```powershell
-npm install
-npm run fixture:json
-npm run fixture:video
-npm run dev
-```
-
-Open the address displayed by Vite. In the **素材** tab import `fixtures/demo.mp4` then `fixtures/demo.json`. Explore preview, subtitle word editing, style and seeking.
-
-### Render automatically via Remotion
+## 在 Windows 构建
 
 ```powershell
-npm run export -- --video fixtures/demo.mp4 --json fixtures/demo.json --out exports/demo_reading.mp4
+npm.cmd ci
+npm.cmd run typecheck
+npm.cmd run build
+npm.cmd test
+dotnet publish desktop/EnglishVideoReader.csproj -c Release -o dist/wpf-m2
 ```
 
-Remotion must bundle successfully and obtain its rendering browser/compositor. The CLI stages one input MP4 in `public/__export_input.mp4` and cleans it up afterwards. **Exports are serialized in this prototype**; simultaneous exports are not supported. Do not use this export implementation for untrusted media; add project input validation and staging isolation first.
+双击 `dist/wpf-m2/EnglishVideoReader.exe`。需已有 Node.js、Chrome/Remotion 依赖及 .NET WebView2。现阶段请从项目工作树内运行，Remotion 导出脚本路径会向上搜索项目目录。
 
-To apply a browser-exported project JSON, add `--project path/to/demo.evr.json`.
+## 本轮已运行测试
 
-### Run core tests (no npm install needed)
+在本环境 `bash scripts/test-core.sh`：24/24 通过；因当前环境 npm 依赖不全，没有完成 `npm run build` 或 WPF / Remotion 端到端验收。请勿将核心测试通过理解为桌面导出已被本次验证。
 
-```bash
-bash scripts/test-core.sh
-```
+## 分段 JSON
 
-8 test cases verify parsing, stable word IDs, editing/timing, linear highlight, layout, short text, bottom clamp, minimum 0.15s scroll, event ordering and project overrides.
-
-## Next action
-
-Open `HANDOFF.md`; it specifies Codex milestones, user-approved requirements, acceptance conditions, blockers, and test evidence. Do **not** assume the prototype is production-ready or run the complete app before npm dependency installation.
-
-## Repository
-
-Target GitHub remote: <https://github.com/chenjing2000/englishvideomaker.git>. No remote push performed by this artifact creation session. See `docs/GIT_SETUP.md`.
-
-For Windows PowerShell core tests, use `powershell -ExecutionPolicy Bypass -File scripts/test-core.ps1` (requires `tsc` on PATH; a successful `npm install` also provides a local TypeScript compiler via `npx tsc`). Alternatively run the Bash script using Git Bash.
+`fixtures/6 Minute English 01-seg1_semantic.evr-transcript.json` 是从用户提供的 80 秒 WhisperX 样本生成的 **8 段语义分组草稿**，保留全部单词时间戳。请在独立测试目录使用，避免覆盖原字幕。`fixtures/6 Minute English 01-seg1.json` 是原始测试字幕副本，仅供 Skill 转换/负面测试。

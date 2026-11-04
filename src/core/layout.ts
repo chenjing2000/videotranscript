@@ -26,7 +26,7 @@ export function buildLayout(words:Word[],style:ReadingStyle,viewportWidth:number
  if(start<visible.length)push(visible.length-1);
  return {rows,wordRows,totalHeight:rows.length?rows[rows.length-1].bottom:0,viewportHeight,viewportWidth};
 }
-export function measureWithCanvas(fontFamily:string,fontSize:number):Measure{
+export function measureWithCanvas(fontFamily:string,fontSize:number,fontWeight=400):Measure{
  const canvas=document.createElement('canvas');const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas 2D 不可用');
- ctx.font=`${fontSize}px ${fontFamily}`;return (s)=>ctx.measureText(s).width;
+ ctx.font=`${fontWeight} ${fontSize}px ${fontFamily}`;return (s)=>ctx.measureText(s).width;
 }

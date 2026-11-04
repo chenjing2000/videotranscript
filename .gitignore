@@ -9,3 +9,6 @@ exports/
 3rdparty/*
 !3rdparty/README.md
 /video/
+
+/desktop/bin/
+/desktop/obj/

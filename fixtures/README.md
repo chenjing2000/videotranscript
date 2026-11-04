@@ -1,4 +1,5 @@
-# Fixtures
-`demo.json`: synthetic WhisperX-compatible timestamps.
-`demo.mp4`: generated locally with `npm run fixture:video` (requires external FFmpeg). Git does not track MP4 by default.
-The provided real TED JSON should be copied locally for parsing tests only; it is intentionally not redistributed with this prototype.
+# Fixtures and format policy
+
+Only `*.evr-transcript.json` are valid inputs for the application. The included `demo.evr-transcript.json` and `6 Minute English 01-seg1.evr-transcript.json` are standardized fixtures. `6 Minute English 01-seg1_semantic.evr-transcript.json` demonstrates source semantic metadata converted to the EVR extension; for editorial-quality paragraphs follow the Skill and review manually.
+
+`*.json` without `.evr-transcript` in this fixture folder are **raw WhisperX samples for converter/negative tests only** and the application must reject them. `demo.mp4` can be generated with `npm run fixture:video` (requires FFmpeg). The user-provided MP4 is not redistributed.

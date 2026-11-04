@@ -1,3 +1,5 @@
+> **M4 优先规范（2026-11-04）：** 应用现在只接受 `<视频主名>.evr-transcript.json`，原始 WhisperX `.json` 不再直接加载。段落由 `docs/english-transcript-paragraphs/SKILL.md` 标准化；详见 [`M4_FORMAT_MIGRATION.md`](M4_FORMAT_MIGRATION.md)。下文涉及“同名 WhisperX JSON”旧描述视为历史设计，不得覆盖此规则。
+
 # V1 acceptance test matrix
 
 | ID | Scenario | Expected |
@@ -24,8 +26,10 @@
 | C20 | Toast age 5s to 6s | 100% to 0% alpha, removal exactly 6s |
 | C21 | Export snapshot while editing | output reflects snapshot, not subsequent changes |
 | C22 | 30fps output H264/AAC | 1200x1600, duration ~ source, one original audio track |
-| C23 | Side-by-side frames at 0, 1, 4, middle, end | matching line breaks/word progress/Y across preview/render |
+| C23 | Side-by-side frames at the M1 checkpoints and final frame | matching line breaks/word progress/Y across preview/render |
 | C24 | User-specified bad external path | informative validation error, no silent other executable |
 | C25 | Real supplied ~2k-word JSON | acceptable preview performance, no source data changed |
 
 Current implemented tests: C01/C02/C03/C05/C06(partial)/C07/C08/C09/C16 (core-only). Others are milestones for Codex, **not yet passing**.
+
+M1 evidence and the distinction between unit-only and actual desktop verification are recorded in [the M1 validation report](M1_READING_RENDER_VALIDATION.md).

@@ -1,11 +1,18 @@
-# Publishing this prototype to your empty GitHub repository
+# Git setup — Video Transcript M5
+
+This package contains source for the existing local project; do **not** assume a new public repository exists or change your Git remote as part of installation.
+
+On your existing Windows checkout, use a feature branch before replacing M4 source:
 
 ```powershell
-git clone https://github.com/chenjing2000/englishvideomaker.git
-# Unzip the delivered prototype and copy its contents into the cloned directory
-git add .
-git commit -m "feat: bootstrap English Video Reader core prototype" -m "Add WhisperX parser, highlight/scroll engine, preview, Remotion export draft, tests, and Codex handoff."
-git push origin main
+cd C:\Projects\EnglishVideoMaker
+git switch -c feature/video-transcript-m5
+# Copy the contents of VideoTranscript/ from this ZIP into this existing working directory.
+# Remove obsolete M4 files only after comparing your working tree.
+npm.cmd ci
+npm.cmd run verify
+dotnet publish desktop/VideoTranscript.csproj -c Release -o dist/wpf-m5
+git status
 ```
 
-Adapt the default branch name if different. **Do not commit private/TED video or JSON without permission**. `fixtures/demo.mp4` is synthetic and can be regenerated locally; `.gitignore` currently ignores MP4, so source repo stays lightweight. Use `git switch -c feature/tauri-integration` for Codex next milestone.
+`.tmp-core/`, `dist/`, `node_modules/` and personal source `video/` are ignored. Run Windows UI and MP4 export acceptance tests before merging or pushing to main. Renaming the GitHub repository is a separate user-controlled operation, not required for the new executable name.

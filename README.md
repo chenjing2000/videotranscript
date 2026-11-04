@@ -1,36 +1,42 @@
-# EVR Transcript v1 — important M4 update
+# Video Transcript — M5
 
-**Reader now accepts only `<video-stem>.evr-transcript.json` produced and validated by the Skill at [`docs/english-transcript-paragraphs/SKILL.md`](docs/english-transcript-paragraphs/SKILL.md). Raw `<video-stem>.json` is deliberately rejected by the UI, WPF pairing, and the MP4 export CLI.** This is a breaking input format change. Original MP4 and original WhisperX JSON are preserved.
+Windows application for readable English video transcripts: WPF/.NET 10 + WebView2 + React/TypeScript + Remotion. Source MP4/audio are preserved. Logical 1200×1600 portrait output with still pages, explicit word positioning and progressive word highlights.
 
-To prepare an input, see [`docs/M4_FORMAT_MIGRATION.md`](docs/M4_FORMAT_MIGRATION.md). The included standardized fixture is an example, not an assertion that the semantic paragraphs have undergone final editorial approval.
+## Breaking changes
+- Only `<video-stem>.video-transcript.json` with `video_transcript.format = "video-transcript"`, `schemaVersion = 2` is accepted.
+- The only paragraph marker is `segments[].words[].breakParagraph: true` (omit when not breaking). `word_segments` remains unchanged.
+- Original WhisperX JSON, v1/EVR subtitles and previous project schemas are unsupported; no migration utility.
+- Project files live at `.video-transcript/projects/<stem>.project.json` and use `video-transcript-project` schema v2.
+- All internal paragraph flag names use `breakParagraph`. Automatically assigned word IDs remain `s<segment>w<word>`.
 
-> M3 更新：默认 Word 式两端对齐、减少分页留白、`npm test` 自动编译。详见 `docs/M3_JUSTIFICATION_AND_PAGE_FILL.md` 和 `M3_APPLY.md`。
-
-# English Video Reader — WPF + React + Remotion (M2 静态分页源码版)
-
-这是基于 Windows WPF PoC 更新的 **M2 静态分页**源码，不是已在 Windows 上运行验证完成的安装包。完整开发/验证要求见 [`HANDOFF.md`](HANDOFF.md)。
-
-- 原生桌面：.NET 10 WPF + WebView2。
-- 阅读及样式：React + TypeScript；静态页面、瞬时切换、按时间逐词线性着色。
-- 导出：Remotion 4.0.539，1200×1600、默认 30 fps，保留源视频原声。
-- 输入：WhisperX JSON（支持语义段落标记），工程保存到 `.evr/projects/`，导出到 `exports/`。
-
-## 在 Windows 构建
-
+## Build (Windows PowerShell)
 ```powershell
 npm.cmd ci
-npm.cmd run typecheck
-npm.cmd run build
-npm.cmd test
-dotnet publish desktop/EnglishVideoReader.csproj -c Release -o dist/wpf-m2
+npm.cmd run verify
+dotnet publish desktop/VideoTranscript.csproj -c Release -o dist/wpf-m5
+.\dist\wpf-m5\VideoTranscript.exe
 ```
+`verify` checks full TypeScript, Vite, core tests and Skill tests. Requires Python 3.10+ for Skill tests and .NET 10 SDK for Windows publish. The warning about `esbuild` install script may require npm script approval in your environment.
 
-双击 `dist/wpf-m2/EnglishVideoReader.exe`。需已有 Node.js、Chrome/Remotion 依赖及 .NET WebView2。现阶段请从项目工作树内运行，Remotion 导出脚本路径会向上搜索项目目录。
+## Standardize subtitle
+See `docs/skills/video-transcript-paragraphs/SKILL.md`. The Skill uses AI-reviewed word ID decisions during processing, but writes word-local `breakParagraph` marks into the final video subtitle. Preview paragraphs in `.paragraphs.md` before publishing.
 
-## 本轮已运行测试
+## Export CLI
+```powershell
+npm.cmd run export -- --video "video/lesson.mp4" --json "video/lesson.video-transcript.json" --out "video/exports/lesson.mp4"
+```
+WPF drives the export directly and snapshots the project/page plan for determinism.
 
-在本环境 `bash scripts/test-core.sh`：24/24 通过；因当前环境 npm 依赖不全，没有完成 `npm run build` 或 WPF / Remotion 端到端验收。请勿将核心测试通过理解为桌面导出已被本次验证。
+## Layout invariants
+- `breakParagraph` alone decides natural paragraphs; punctuation alone never causes a paragraph break.
+- Word positions use deterministic computed `x` coordinates; the renderer does not reflow into another line.
+- Word-style justification applies to all but the true last line of a natural paragraph.
+- Each page takes every full line that fits, with no widow/orphan/semantic break penalties; paragraph gap is charged only between actual paragraphs **on the same page**.
+- For every non-last page, the next line (+ any on-page paragraph gap) is too tall to fit.
+- Preview and Remotion share the same page plan. Source word timing is immutable.
 
-## 分段 JSON
+See `docs/M5_DESIGN_AND_VALIDATION.md` for acceptance and caveats.
 
-`fixtures/6 Minute English 01-seg1_semantic.evr-transcript.json` 是从用户提供的 80 秒 WhisperX 样本生成的 **8 段语义分组草稿**，保留全部单词时间戳。请在独立测试目录使用，避免覆盖原字幕。`fixtures/6 Minute English 01-seg1.json` 是原始测试字幕副本，仅供 Skill 转换/负面测试。
+## Playback, shortcuts and review skills
+
+See [player shortcuts](docs/PLAYBACK_SHORTCUTS.md). The code review Skill is in `docs/skills/video-transcript-code-review/SKILL.md`; the transcript paragraphing Skill is in `docs/skills/video-transcript-paragraphs/SKILL.md`. All GitHub commit messages for this project must be written in **English**.

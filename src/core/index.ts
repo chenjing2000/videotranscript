@@ -2,3 +2,5 @@ export * from './types';export * from './transcript';export * from './highlight'
 
 export * from './pagination';
 export * from './style-presets';
+
+export * from './player-shortcuts';

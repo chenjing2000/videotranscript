@@ -1,19 +1,28 @@
-> **M4 优先规范（2026-11-04）：** 应用现在只接受 `<视频主名>.evr-transcript.json`，原始 WhisperX `.json` 不再直接加载。段落由 `docs/english-transcript-paragraphs/SKILL.md` 标准化；详见 [`M4_FORMAT_MIGRATION.md`](M4_FORMAT_MIGRATION.md)。下文涉及“同名 WhisperX JSON”旧描述视为历史设计，不得覆盖此规则。
+# Video Transcript M5 — Data model and persistence
 
-# Data and persistence
+## Input
+WhisperX raw JSON is only a source for the Skill; the app accepts `<video-stem>.video-transcript.json` with `video_transcript: {format:"video-transcript", schemaVersion:2}`. Paragraphs are marked solely with optional `segments[].words[].breakParagraph:true`; final word never marked. `word_segments` stays original and untagged.
 
-## Source parser
+The parser assigns internal stable IDs `s<segmentIndex>w<wordIndex>` (indices zero-based). Each word has immutable `original`, `start`, `end`, `score`, with editable `display`, `hidden`, `breakParagraph`. `sourceBreakParagraph` and `sourceDisplay` are runtime baselines; they are not input fields.
 
-WhisperX `segments[i].words[j]` -> stable ID `s{i}w{j}`; immutable `original`, `start`, `end`, `score` and `segmentId`. Mutable `display`, `hidden`, `paragraphAfter` copied into current edit model. Skip malformed timings with clear warnings; block production export if serious integrity errors. Record transcript source hash before editing. Do not synthesize time for unknown/injected words.
+## Project
+Persist under `<video-dir>/.video-transcript/projects/<stem>.project.json`. Strict project schema:
 
-## Per-video edit project
+```json
+{
+  "format": "video-transcript-project",
+  "schemaVersion": 2,
+  "source": {"videoName":"lesson.mp4","subtitleName":"lesson.video-transcript.json","subtitleSha256":"HEX_HASH"},
+  "overrides": {"s10w38":{"breakParagraph":false}},
+  "style": {},
+  "export": {"fps":30,"quality":"high"}
+}
+```
 
-Save `<video_dir>/.evr/projects/<stem>.evr.json`. `schemaVersion=1`, video/subtitle reference and fingerprint, sparse word overrides keyed by source IDs, style, fps/quality, save timestamp. Use atomic temp-write+rename, backup last good version. On open validate same-basename JSON and project schema/source fingerprints; if matching project exists restore, else start from WhisperX. If fingerprints differ show explicit warning + recovery options, do not silently apply mismatched word edits. On import multiple candidate videos user chooses explicitly.
+`style` in the example is abbreviated: actual saved projects contain the ReadingStyle properties. An override's `breakParagraph:true` adds a boundary, `false` removes it, omitted means inherit source. The source file is immutable. Projects are saved atomically with a backup and validated against the source hash. Old project schema is not supported; there is no migration tool.
 
-## Output
+## Export
+Export jobs receive a snapshot of edited project and page geometry. Save under `<video-dir>/exports/<stem>_reading.mp4` (append numeric suffix on collision). Keep input MP4/JSON and project immutable during the export. The CLI can also derive its layout when no desktop plan is supplied.
 
-Default `<video_dir>/exports/<stem>_reading.mp4`; add suffix `_002`, `_003`, ... on collisions; never overwrite source MP4 or JSON. Temporary render snapshot immutable. No per-export editing of source file. Intermediate stage isolated to avoid concurrent jobs; current draft `public/__export_input.mp4` is prototype-only and not concurrent-safe.
-
-## Global settings
-
-`%APPDATA%/EnglishVideoReader/settings.json` e.g. `{ "version":1, "paths":{"node":"C:\\Program Files\\nodejs\\node.exe","ffmpeg":null,"browser":null}, "recentRoot":null, "ui":{"splitRatio":0.65}}`. User explicit paths take precedence; invalid path -> report; auto-detect only in auto mode. External binaries need not be copied into `3rdparty/`.
+## Global runtime
+WPF WebView2 profile uses `%LOCALAPPDATA%/VideoTranscript/WebView2`. A later application Settings feature may use `%APPDATA%/VideoTranscript/settings.json`; it is not part of the current M5 prototype.

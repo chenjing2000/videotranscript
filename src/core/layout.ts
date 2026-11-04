@@ -21,7 +21,7 @@ export function buildLayout(words:Word[],style:ReadingStyle,viewportWidth:number
   const width=measure(w.display)+(hasSpace?measure(' '):0);
   if(hasSpace&&currentWidth+width>maxWidth){push(i-1);}
   currentWidth+=measure(w.display)+(currentWidth>0?measure(' '):0);
-  if(w.paragraphAfter){push(i);top+=style.paragraphGap;}
+  if(w.breakParagraph){push(i);top+=style.paragraphGap;}
  });
  if(start<visible.length)push(visible.length-1);
  return {rows,wordRows,totalHeight:rows.length?rows[rows.length-1].bottom:0,viewportHeight,viewportWidth};

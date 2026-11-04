@@ -1,0 +1,108 @@
+{
+  "language": "en",
+  "video_transcript": {
+    "format": "video-transcript",
+    "schemaVersion": 2
+  },
+  "segments": [
+    {
+      "start": 0,
+      "end": 4.5,
+      "text": "Reading English can be simple and enjoyable.",
+      "words": [
+        {
+          "word": "Reading",
+          "start": 0.3,
+          "end": 0.9,
+          "score": 0.99
+        },
+        {
+          "word": "English",
+          "start": 1,
+          "end": 1.55,
+          "score": 0.99
+        },
+        {
+          "word": "can",
+          "start": 1.6,
+          "end": 1.85,
+          "score": 0.99
+        },
+        {
+          "word": "be",
+          "start": 1.9,
+          "end": 2.12,
+          "score": 0.99
+        },
+        {
+          "word": "simple",
+          "start": 2.2,
+          "end": 3,
+          "score": 0.99
+        },
+        {
+          "word": "and",
+          "start": 3.1,
+          "end": 3.35,
+          "score": 0.99
+        },
+        {
+          "word": "enjoyable.",
+          "start": 3.5,
+          "end": 4.45,
+          "score": 0.99,
+          "breakParagraph": true
+        }
+      ]
+    },
+    {
+      "start": 4.7,
+      "end": 9.8,
+      "text": "Each highlighted word follows the original voice.",
+      "words": [
+        {
+          "word": "Each",
+          "start": 4.75,
+          "end": 5.2,
+          "score": 0.99
+        },
+        {
+          "word": "highlighted",
+          "start": 5.25,
+          "end": 6.35,
+          "score": 0.99
+        },
+        {
+          "word": "word",
+          "start": 6.4,
+          "end": 6.9,
+          "score": 0.99
+        },
+        {
+          "word": "follows",
+          "start": 7,
+          "end": 7.55,
+          "score": 0.99
+        },
+        {
+          "word": "the",
+          "start": 7.65,
+          "end": 7.85,
+          "score": 0.99
+        },
+        {
+          "word": "original",
+          "start": 8,
+          "end": 8.7,
+          "score": 0.99
+        },
+        {
+          "word": "voice.",
+          "start": 8.75,
+          "end": 9.7,
+          "score": 0.99
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
-  "name": "englishvideomaker",
-  "version": "0.1.0",
+  "name": "video-transcript",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,8 +13,9 @@
     "export": "node scripts/export.mjs",
     "fixture:video": "node scripts/make-fixture.mjs",
     "fixture:json": "node scripts/prepare-fixture.mjs",
-    "test:skill": "python -m unittest discover docs/english-transcript-paragraphs/tests -v",
-    "test:all": "npm run test && npm run test:skill"
+    "test:skill": "python -m unittest discover docs/skills/video-transcript-paragraphs/tests -v",
+    "test:all": "npm run test && npm run test:skill",
+    "verify": "npm run typecheck && npm run build && npm run test && npm run test:skill"
   },
   "dependencies": {
     "@remotion/media": "4.0.539",

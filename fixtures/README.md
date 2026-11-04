@@ -1,5 +1,3 @@
-# Fixtures and format policy
+# M5 fixtures
 
-Only `*.evr-transcript.json` are valid inputs for the application. The included `demo.evr-transcript.json` and `6 Minute English 01-seg1.evr-transcript.json` are standardized fixtures. `6 Minute English 01-seg1_semantic.evr-transcript.json` demonstrates source semantic metadata converted to the EVR extension; for editorial-quality paragraphs follow the Skill and review manually.
-
-`*.json` without `.evr-transcript` in this fixture folder are **raw WhisperX samples for converter/negative tests only** and the application must reject them. `demo.mp4` can be generated with `npm run fixture:video` (requires FFmpeg). The user-provided MP4 is not redistributed.
+Raw `.json` files remain immutable source specimens. Only `*.video-transcript.json` is valid for app/CLI subtitle import. The 80s BBC fixture retains its 200 original word anchors with Skill-defined markers. `demo.mp4` is a small test clip; run `npm run fixture:json` if you need to regenerate the demo v2 transcript. No v1 files are used.

@@ -1,35 +1,21 @@
-> **M4 优先规范（2026-11-04）：** 应用现在只接受 `<视频主名>.evr-transcript.json`，原始 WhisperX `.json` 不再直接加载。段落由 `docs/english-transcript-paragraphs/SKILL.md` 标准化；详见 [`M4_FORMAT_MIGRATION.md`](M4_FORMAT_MIGRATION.md)。下文涉及“同名 WhisperX JSON”旧描述视为历史设计，不得覆盖此规则。
+# Video Transcript M5 Acceptance Checklist
 
-# V1 acceptance test matrix
+## Automated, cross-platform
+```powershell
+npm.cmd ci
+npm.cmd run verify
+```
+`verify` runs TS typecheck, Vite build, 41+ core tests and Python Skill tests. Source validation, word IDs, breaks, time invariance, line geometry, justify and greedy fill are covered. Review each reported failure; do not proceed to publish if Vite did not generate `dist/index.html`.
 
-| ID | Scenario | Expected |
-|---|---|---|
-| C01 | Valid WhisperX with `segments[].words` | stable original time anchors; no edits to source |
-| C02 | User changes spelling, case or punctuation | only display changes, times unchanged |
-| C03 | User tries two words in one edit | reject, display right-side toast |
-| C04 | Hide final word in a line | visible rows/timing recomputed, no hidden extra line |
-| C05 | First word start/middle/end time | highlight 0%/50%/100% linear horizontal |
-| C06 | Seek backward after playback | p(t), scroll Y(t) deterministic |
-| C07 | Text total height <= viewport | initial top align, Y=0, bottom blank acceptable |
-| C08 | Text total height > viewport | final row flush bottom and never overscroll |
-| C09 | Interline gap 0.01 s | >=.15s animation, no teleport |
-| C10 | Dense consecutive lines | no event overlap-induced discontinuity; no tail drift beyond max |
-| C11 | Paragraph gap 24px | actual line geometry used for scroll shift |
-| C12 | Very tall source video | warning, never silently distort source |
-| C13 | Folder multiple MP4/JSON pairs | no automatic first video, explicit select |
-| C14 | Expand/collapse nested folder | + only one level, - collapses all descendants |
-| C15 | Missing/malformed same-basename JSON | right toast with detailed error, no accidental pairing |
-| C16 | Save, exit, reopen video | exact word overrides/paragraph/style restore |
-| C17 | Source file edited outside app | detect fingerprint mismatch; safe recovery |
-| C18 | Output already exists | next filename increment; never overwrite MP4/JSON |
-| C19 | Toast 4 arrivals <6s | max 3; newest at top; bottom alignment after timeout |
-| C20 | Toast age 5s to 6s | 100% to 0% alpha, removal exactly 6s |
-| C21 | Export snapshot while editing | output reflects snapshot, not subsequent changes |
-| C22 | 30fps output H264/AAC | 1200x1600, duration ~ source, one original audio track |
-| C23 | Side-by-side frames at the M1 checkpoints and final frame | matching line breaks/word progress/Y across preview/render |
-| C24 | User-specified bad external path | informative validation error, no silent other executable |
-| C25 | Real supplied ~2k-word JSON | acceptable preview performance, no source data changed |
+## Windows-specific
+```powershell
+dotnet publish desktop/VideoTranscript.csproj -c Release -o dist/wpf-m5
+.\dist\wpf-m5\VideoTranscript.exe
+```
+Confirm video/source file pair `6 Minute English 01-seg1.mp4` / `6 Minute English 01-seg1.video-transcript.json`. `animal lovers.` must not end a paragraph; `In the UK...` continues without first-line indentation. Test multiple page sizes, justify and left alignment, backward seek, editable word break, save/reopen, export MP4 with audio once, preview/export page consistency.
 
-Current implemented tests: C01/C02/C03/C05/C06(partial)/C07/C08/C09/C16 (core-only). Others are milestones for Codex, **not yet passing**.
+## Negative tests
+Refuse original `*.json`, deprecated `*.evr-transcript.json`, missing or wrongly named v2, wrong `video_transcript` schema, `breakParagraph:false` in subtitle, marker on terminal word or `word_segments`, changed/mismatched SHA, and old project schemas.
 
-M1 evidence and the distinction between unit-only and actual desktop verification are recorded in [the M1 validation report](M1_READING_RENDER_VALIDATION.md).
+## Observability
+Every non-final page must use maximal whole lines. When a page appears short, inspect `usedHeight`, `availableHeight`, height of next line and paragraph gap. Do not assume a semantic or widow/orphan constraint: M5 intentionally has none.

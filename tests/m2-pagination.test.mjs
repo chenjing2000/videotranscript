@@ -6,7 +6,7 @@ const require=createRequire(import.meta.url);
 const core=require('../.tmp-core/index.js');
 const style={...core.DEFAULT_STYLE,fontFamily:'Arial',fontSize:10,fontWeight:400,lineHeight:1,paragraphGap:7,paddingX:0,paddingY:2,firstLineIndentCh:4};
 const measure=text=>text.length*5;
-const words=(list)=>list.map((text,i)=>({id:`w${i}`,original:text,display:text,start:i*1.3,end:i*1.3+0.8,hidden:false,paragraphAfter:false,segmentId:'s0'}));
+const words=(list)=>list.map((text,i)=>({id:`w${i}`,original:text,display:text,start:i*1.3,end:i*1.3+0.8,hidden:false,breakParagraph:false,segmentId:'s0'}));
 const plan=(w,height=25,width=65,s=style)=>core.paginate(w,s,width,height,measure);
 test('M2: short text stays one stationary page, starts with first-line indentation',()=>{
  const p=plan(words(['Hi.','Bye.']),30,100);
@@ -33,7 +33,7 @@ test('M2: paragraphs only indent their real first line, not page continuation',(
  for(const row of all.slice(1))assert.equal(row.words[0].x,0);
 });
 test('M2: new paragraph indent and spacing are applied within the page',()=>{
- const w=words(['First.','Second.']);w[0].paragraphAfter=true;
+ const w=words(['First.','Second.']);w[0].breakParagraph=true;
  const p=plan(w,35,100);
  assert.equal(p.pages.length,1);
  assert.equal(p.pages[0].rows[1].top,style.paddingY+10+style.paragraphGap);
@@ -70,27 +70,27 @@ test('M2: refuses page shorter than one row',()=>{
  assert.throws(()=>plan(words(['text']),8,100),/不足/);
 });
 test('M2: parses presegmented paragraph metadata without changing source time',()=>{
- const inp=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.evr-transcript.json','utf8'));
- const source=core.parseWhisperX(inp);assert.equal(source.words.length,200);
- const tagged=structuredClone(inp);tagged.evr.paragraphBreaksAfter=['s0w0'];
- const trans=core.parseWhisperX(tagged);
- assert.equal(trans.words[0].paragraphAfter,true);
+ const inp=JSON.parse(readFileSync('fixtures/6 Minute English 01-seg1.video-transcript.json','utf8'));
+ const source=core.parseVideoTranscript(inp);assert.equal(source.words.length,200);
+ const tagged=structuredClone(inp);tagged.segments[0].words[0].breakParagraph=true;
+ const trans=core.parseVideoTranscript(tagged);
+ assert.equal(trans.words[0].breakParagraph,true);
  assert.deepEqual(trans.words.map(w=>[w.start,w.end]),source.words.map(w=>[w.start,w.end]));
 });
-test('M2: old project gains new style defaults without losing existing values',()=>{
+test('M5: normalize missing optional style fields in a v2 project',()=>{
  const p=core.createProject('test.mp4','test.json',words(['one.']));delete p.style.firstLineIndentCh;delete p.style.fontWeight;
- p.style.fontSize=44;const migrated=core.migrateProjectStyle(p);
+ p.style.fontSize=44;const migrated=core.normalizeProjectStyle(p);
  assert.equal(migrated.style.fontSize,44);assert.equal(migrated.style.firstLineIndentCh,4);assert.equal(migrated.style.fontWeight,400);
 });
 
 test('M2: removing source paragraph break survives project save/reload',()=>{
- const input={language:'en',evr:{format:'evr-transcript',schemaVersion:1,paragraphBreaksAfter:['s0w0']},segments:[{words:[{word:'One.',start:1,end:1.5}]},{words:[{word:'Two.',start:2,end:2.5}]}]};
- const parsed=core.parseWhisperX(input);
- assert.equal(parsed.words[0].paragraphAfter,true);
- const changed=parsed.words.map((w,i)=>i===0?{...w,paragraphAfter:false}:w);
+ const input={language:'en',video_transcript:{format:'video-transcript',schemaVersion:2},segments:[{words:[{word:'One.',start:1,end:1.5,breakParagraph:true}]},{words:[{word:'Two.',start:2,end:2.5}]}]};
+ const parsed=core.parseVideoTranscript(input);
+ assert.equal(parsed.words[0].breakParagraph,true);
+ const changed=parsed.words.map((w,i)=>i===0?{...w,breakParagraph:false}:w);
  const project=core.saveProjectView(core.createProject('x.mp4','x.json',parsed.words),changed);
- assert.equal(project.overrides[parsed.words[0].id].paragraphAfter,false);
- assert.equal(core.applyOverrides(parsed,project).words[0].paragraphAfter,false);
+ assert.equal(project.overrides[parsed.words[0].id].breakParagraph,false);
+ assert.equal(core.applyOverrides(parsed,project).words[0].breakParagraph,false);
 });
 
 test('M3: Word-style justification reaches right edge; paragraph last row stays left',()=>{
@@ -138,10 +138,60 @@ test('M3: cross-paragraph page filling avoids large empty region and never loses
  const w=words(Array.from({length:24},()=> 'word'));
  // Each 4 words occupy one 100px line: 4*20+3*5=95.
  // Three 2-row paragraphs; first page fits 4 rows and should not stop at 2.
- [7,15,23].forEach(i=>w[i].paragraphAfter=true);
+ [7,15,23].forEach(i=>w[i].breakParagraph=true);
  const s={...style,firstLineIndentCh:0,paragraphGap:0,textAlign:'justify'};
  const p=plan(w,45,100,s);
  assert.equal(p.pages.length,2);
  assert.ok(p.pages[0].rows.length>=3,`first page only ${p.pages[0].rows.length} rows`);
  assert.deepEqual(p.pages.flatMap(pg=>pg.rows.flatMap(r=>r.words.map(x=>x.id))),w.map(x=>x.id));
+});
+
+
+test('M5: greedy pages retain next full line instead of sentence score',()=>{
+ const w=words(Array.from({length:30},(_,i)=>i===5?'period.':'word'));
+ const s={...style,firstLineIndentCh:0,paragraphGap:0,textAlign:'left'};
+ const p=plan(w,34,100,s);
+ assert.equal(p.pages[0].rows.length,3);
+ assert.equal(p.pages[0].usedHeight,30);
+ assert.equal(p.pages[1].rows[0].top,2);
+});
+test('M5: new paragraph gap is not charged at page top',()=>{
+ const w=words(['aaaa','bbbb','cccc','dddd','eeee','ffff']);
+ w[2].breakParagraph=true;
+ const s={...style,firstLineIndentCh:0,paragraphGap:9,textAlign:'left'};
+ const p=plan(w,22,50,s);
+ assert.ok(p.pages.length>1);
+ for(const page of p.pages)assert.equal(page.rows[0].top,s.paddingY);
+});
+test('M5: each nonfinal page cannot fit its next row, including paragraph gap',()=>{
+ const w=words(Array.from({length:55},(_,i)=>i%7===0?'little.':'word'));
+ [12,28,43].forEach(i=>w[i].breakParagraph=true);
+ const s={...style,paragraphGap:7,textAlign:'justify'};
+ const p=plan(w,49,100,s);
+ for(let j=0;j<p.pages.length-1;j++){
+  const current=p.pages[j],next=p.pages[j+1].rows[0];
+  const missing=s.fontSize*s.lineHeight + (next.paragraphStart?s.paragraphGap:0);
+  assert.ok(current.usedHeight+missing>p.availableHeight+1e-6);
+ }
+});
+
+// Review regression: incomplete or corrupted external snapshots must not crash ReaderCanvas.
+test('Review: page-plan snapshots require valid nested rows, words, and switches',()=>{
+ const core=require('../.tmp-core/index.js');
+ const make=()=>core.paginate([{id:'s0w0',segmentId:'s0',original:'Hello',display:'Hello',start:0,end:1,hidden:false,breakParagraph:false}],core.DEFAULT_STYLE,1200,900,s=>s.length*20);
+ const good=make();assert.equal(core.isPagePlan(good),true);
+ const broken=structuredClone(good);broken.pages[0].rows[0].words[0].x='invalid';assert.equal(core.isPagePlan(broken),false);
+ const missing=structuredClone(good);missing.pages[0].rows[0].words=null;assert.equal(core.isPagePlan(missing),false);
+ const invalidSwitch=structuredClone(good);invalidSwitch.switches[0]=-1;assert.equal(core.isPagePlan(invalidSwitch),false);
+});
+
+test('Review: hiding a word with breakParagraph does not merge neighboring paragraphs',()=>{
+ const text=words(['A','hidden.','B','C']);
+ text[1].breakParagraph=true;text[1].hidden=true;
+ const p=plan(text,60,100);
+ const rows=p.pages.flatMap(page=>page.rows);
+ assert.equal(rows[0].paragraphEnd,true);
+ assert.equal(rows[1].paragraphStart,true);
+ assert.equal(rows.flatMap(row=>row.words).length,3);
+ assert.equal(text[0].breakParagraph,false,'source word should not be mutated');
 });

@@ -12,3 +12,10 @@ exports/
 
 /desktop/bin/
 /desktop/obj/
+
+# Generated TypeScript test output
+.tmp-core/
+
+# Python generated test artifacts
+__pycache__/
+*.pyc

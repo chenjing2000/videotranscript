@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 const require = createRequire(import.meta.url);
 const core = require('../.tmp-core/index.js');
 
-const transcript = core.parseWhisperX({language:'en',evr:{format:'evr-transcript',schemaVersion:1,paragraphBreaksAfter:[]},segments: [
+const transcript = core.parseVideoTranscript({language:'en',video_transcript:{format:'video-transcript',schemaVersion:2},segments: [
   {words: [{word:'Hello.',start:7.293,end:7.613}]},
   {words: [{word:'Here',start:8,end:8.4},{word:'again.',start:8.5,end:9}]}
 ]});
@@ -31,7 +31,7 @@ test('Silent opening is uncolored and stationary, with stateless midpoint and re
 
 test('Semantic paragraph overrides remain separate from segment IDs and line wrapping', () => {
   const original = transcript.words;
-  const changed = original.map(word => word.id === 's1w0' ? {...word, paragraphAfter: true} : word);
+  const changed = original.map(word => word.id === 's1w0' ? {...word, breakParagraph: true} : word);
   const project = core.createProject('sample.mp4', 'sample.json', changed);
   const restored = core.applyOverrides(transcript, project).words;
   assert.deepEqual(Object.keys(project.overrides), ['s1w0']);

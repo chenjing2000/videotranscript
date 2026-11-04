@@ -8,18 +8,6 @@ export interface PagePlan {pages:Page[];switches:number[];warnings:string[];avai
 const EPS=1e-6;
 const isSentenceEnd=(s:string)=>/[.!?][)'"”’]*$/u.test(s.trim());
 interface RawRow extends Omit<PageRow,'top'> {}
-// Semantic boundaries matter, but an almost-empty page must not be preferred
-// to a safe line-level split. These are SOFT penalties rather than constraints.
-function breakPenalty(row:RawRow){return row.paragraphEnd?0:row.endsSentence?1.5:4;}
-function orphanPenalty(rows:RawRow[], first:number, last:number){
- const end=rows[last];if(end.paragraphEnd || end.endsSentence)return 0;
- // Avoid leaving a single line of a continuing paragraph on either side
- // when alternatives fit. The safety/space constraint remains primary.
- let trailing=1;for(let k=last-1;k>=first && !rows[k].paragraphEnd;k--)trailing++;
- let leading=0;for(let k=last+1;k<rows.length&&!rows[k].paragraphEnd;k++){leading++;if(leading>=2)break;}
- if(last+1<rows.length)leading=Math.max(leading,1);
- return (trailing===1?5:0)+(leading===1?5:0);
-}
 export function paginate(words:Word[],style:ReadingStyle,viewportWidth:number,viewportHeight:number,measure:Measure):PagePlan{
  const numeric=[style.fontSize,style.lineHeight,style.paragraphGap,style.paddingX,style.paddingY,style.firstLineIndentCh,viewportWidth,viewportHeight];
  if(numeric.some(x=>!Number.isFinite(x)))throw new Error('排版参数必须为有限数值');
@@ -27,7 +15,18 @@ export function paginate(words:Word[],style:ReadingStyle,viewportWidth:number,vi
  const availableWidth=viewportWidth-2*style.paddingX,availableHeight=viewportHeight-2*style.paddingY;
  const height=style.fontSize*style.lineHeight;
  if(availableWidth<=0||availableHeight+EPS<height)throw new Error('阅读区域不足以容纳一行文字');
- const visible=words.filter(w=>!w.hidden), warnings:string[]=[];
+ // Hidden words do not render, but a paragraph break attached to a hidden
+ // word still ends that paragraph. Transfer the boundary to the last visible
+ // word before it, without mutating the source transcript or edit overrides.
+ const visible:Word[]=[];
+ for(const word of words){
+  if(!word.hidden){visible.push(word);continue;}
+  if(word.breakParagraph&&visible.length){
+   const last=visible.length-1;
+   visible[last]={...visible[last],breakParagraph:true};
+  }
+ }
+ const warnings:string[]=[];
  if(!visible.length)return {pages:[],switches:[],warnings,availableHeight,availableWidth,viewportHeight,viewportWidth};
  for(let i=0;i<visible.length;i++){
   const w=visible[i];if(!Number.isFinite(w.start)||!Number.isFinite(w.end)||w.end<=w.start)throw new Error(`无效时间戳：${w.id}`);
@@ -61,28 +60,24 @@ export function paginate(words:Word[],style:ReadingStyle,viewportWidth:number,vi
   if(i>start && width+lead+measured>availableWidth+EPS){flush(i-1,false);lead=0;}
   positions.push({index:i,id:w.id,x:width+lead,width:measured});width+=lead+measured;
   if(width>availableWidth+EPS)warnings.push(`单词或首行缩进超过行宽：${w.id}`);
-  if(w.paragraphAfter)flush(i,true);
+  if(w.breakParagraph)flush(i,true);
  });
  if(start<visible.length)flush(visible.length-1,true);
  if(raw.length)raw[raw.length-1].paragraphEnd=true;
- const n=raw.length,best=Array<number>(n+1).fill(Infinity),next=Array<number>(n).fill(-1);best[n]=0;
- for(let i=n-1;i>=0;i--){let used=0;
-  for(let j=i;j<n;j++){
-   if(j>i&&raw[j].paragraphStart)used+=style.paragraphGap;
-   used+=height;if(used>availableHeight+EPS)break;
-   const remaining=(availableHeight-used)/availableHeight,last=j===n-1;
-   // Favor fuller pages without requiring complete paragraphs. A fixed
-   // per-page cost avoids producing extra pages just for nicer boundaries.
-   const score=15+(last?0:120*remaining*remaining+breakPenalty(raw[j])+orphanPenalty(raw,i,j))+best[j+1];
-   if(score<best[i]){best[i]=score;next[i]=j+1;}
-  }
-  if(next[i]<0)throw new Error('自动分页失败：一行文字无法容纳');
- }
+ // M5: strict greedy fill; no sentence/paragraph score, widow or orphan controls.
+ // Every page consumes the maximum number of complete lines that physically fit.
  const pages:Page[]=[];
- for(let i=0;i<n;){const stop=next[i],rows:PageRow[]=[];let y=style.paddingY;
-  for(let j=i;j<stop;j++){if(j>i&&raw[j].paragraphStart)y+=style.paragraphGap;rows.push({...raw[j],top:y});y+=height;}
+ for(let i=0;i<raw.length;){
+  const rows:PageRow[]=[];let y=style.paddingY;
+  while(i<raw.length){
+   const line=raw[i];
+   const gap=rows.length>0&&line.paragraphStart?style.paragraphGap:0;
+   if(rows.length>0&&y+gap+height>style.paddingY+availableHeight+EPS)break;
+   if(rows.length===0&&height>availableHeight+EPS)throw new Error('自动分页失败：一行文字无法容纳');
+   y+=gap;rows.push({...line,top:y});y+=height;i++;
+  }
   const a=visible[rows[0].startWord],b=visible[rows[rows.length-1].endWord];
-  pages.push({index:pages.length,rows,firstWordId:a.id,lastWordId:b.id,firstStart:a.start,lastEnd:b.end,usedHeight:y-style.paddingY});i=stop;
+  pages.push({index:pages.length,rows,firstWordId:a.id,lastWordId:b.id,firstStart:a.start,lastEnd:b.end,usedHeight:y-style.paddingY});
  }
  const switches=[0];
  for(let i=1;i<pages.length;i++){
@@ -99,10 +94,39 @@ export function pageAtTime(plan:PagePlan,time:number){
  while(lo<hi){const m=(lo+hi)>>>1;if(plan.switches[m]<=time)lo=m+1;else hi=m;}
  return Math.max(0,lo-1);
 }
-/** Basic snapshot validation; protects WPF/Remotion from old scrolling layouts. */
+/** Validate the shape and basic invariants of an external page-plan snapshot.
+ * This is a guard for rendering, not a replacement for source fingerprint checks. */
 export function isPagePlan(v:unknown):v is PagePlan{
- if(!v||typeof v!=='object')return false;
+ if(!v||typeof v!=='object'||Array.isArray(v))return false;
  const p=v as Partial<PagePlan>;
- return Array.isArray(p.pages)&&Array.isArray(p.switches)&&p.pages.length===p.switches.length&&
- p.pages.every((page,i)=>page.index===i&&Array.isArray(page.rows)&&page.rows.every(row=>Array.isArray(row.words)&&Number.isFinite(row.top)&&Number.isFinite(row.height)));
+ const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
+ if(!Array.isArray(p.pages)||!Array.isArray(p.switches)||
+    p.pages.length!==p.switches.length||!Array.isArray(p.warnings)||
+    !finite(p.availableHeight)||p.availableHeight<=0||
+    !finite(p.availableWidth)||p.availableWidth<=0||
+    !finite(p.viewportHeight)||p.viewportHeight<=0||
+    !finite(p.viewportWidth)||p.viewportWidth<=0)return false;
+ let lastSwitch=-Infinity;
+ for(let i=0;i<p.pages.length;i++){
+  const sw=p.switches[i];
+  if(!finite(sw)||sw<0||sw<lastSwitch)return false;
+  lastSwitch=sw;
+  const page=p.pages[i];
+  if(!page||typeof page!=='object'||page.index!==i||!Array.isArray(page.rows)||!page.rows.length||
+     typeof page.firstWordId!=='string'||typeof page.lastWordId!=='string'||
+     !finite(page.firstStart)||!finite(page.lastEnd)||!finite(page.usedHeight)||page.usedHeight<0)return false;
+  let previousTop=-Infinity;
+  for(const row of page.rows){
+   if(!row||typeof row!=='object'||!Array.isArray(row.words)||!row.words.length||
+      !Number.isInteger(row.startWord)||!Number.isInteger(row.endWord)||row.startWord<0||row.endWord<row.startWord||
+      !finite(row.top)||!finite(row.height)||row.height<=0||row.top<previousTop||
+      typeof row.paragraphStart!=='boolean'||typeof row.paragraphEnd!=='boolean')return false;
+   previousTop=row.top;
+   for(const word of row.words){
+    if(!word||typeof word!=='object'||!Number.isInteger(word.index)||word.index<0||
+       typeof word.id!=='string'||!finite(word.x)||!finite(word.width)||word.width<0)return false;
+   }
+  }
+ }
+ return true;
 }

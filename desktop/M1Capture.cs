@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 
-// Opt-in evidence for the M1 acceptance run, activated only by EVR_M1_EVIDENCE.
+// Opt-in evidence for the M1 acceptance run, activated only by Video Transcript_M1_EVIDENCE.
 internal static class M1Capture
 {
     public static async Task SaveAsync(CoreWebView2 view, string directory, JsonElement snapshot)

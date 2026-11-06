@@ -8,8 +8,9 @@ export type RenderProps={transcript:TranscriptStudioInput;project?:Project;media
 export const ReadingComposition:React.FC<RenderProps>=({transcript,project,mediaKind,videoHeight,mediaFile,pagePlan})=>{
  const frame=useCurrentFrame(),{fps}=useVideoConfig();
  const words=useMemo(()=>{const parsed=parseTranscriptStudio(transcript);return project?applyOverrides(parsed,project).words:parsed.words},[transcript,project]);
- const style=project?normalizeProjectStyle(project).style:DEFAULT_STYLE;
- const canvasWidth=project?.canvas.width??WIDTH,canvasHeight=project?.canvas.height??HEIGHT;
+ const normalizedProject=useMemo(()=>project?normalizeProjectStyle(project):null,[project]);
+ const style=normalizedProject?.style??DEFAULT_STYLE;
+ const canvasWidth=normalizedProject?.canvas.width??WIDTH,canvasHeight=normalizedProject?.canvas.height??HEIGHT;
  const src=staticFile(mediaFile);
  return <AbsoluteFill><ReaderCanvas words={words} style={style} time={frame/fps} canvasWidth={canvasWidth} canvasHeight={canvasHeight} videoHeight={mediaKind==='video'?videoHeight:0} pagePlan={pagePlan} video={mediaKind==='video'?<OffthreadVideo src={src} style={{width:canvasWidth,height:videoHeight,objectFit:'fill'}}/>:null}/>{mediaKind==='audio'&&<Audio src={src}/>}</AbsoluteFill>;
 };

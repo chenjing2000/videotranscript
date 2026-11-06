@@ -8,8 +8,8 @@
 - Video mode: source occupies canvas width proportionally, transcript uses the remaining canvas. Audio mode: transcript fills the logical canvas and the original audio is used for playback and MP4 export.
 - Canvas `width`/`height` are per-project even integer pixel values in [320, 3840], default 1200×1600. Output MP4 matches project dimensions. Aspect ratio is not locked.
 - Responsive geometry (M6 revision): the output canvas is only the rendered reading/video frame. Its desktop preview maintains the configured output aspect ratio; the surrounding frame is **6 DIP wider** (3 DIP at each side). There is **3 DIP above the preview**, and **3 DIP below the transport**. A 48-DIP-high transport attaches directly to the canvas bottom, matches preview width, and stays outside the MP4 export. Workspace client top/bottom inset is 2 DIP each. Minimum preview width: 360 DIP; minimum subtitle-editor width: 240 DIP. The editor takes all otherwise unused width, rather than a 3:2 ratio. Main window native minimum height varies with output aspect ratio.
-- Right panel always shows word-level subtitle editing (no tabs). Toolbar order: Settings, Save, Import JSON, Export MP4. Buttons use circular `#D3E5EB` fill with no visible border.
-- Font family, size and weight apply to both render and word editor; Bold toggle switches 400↔700. Modal settings live in the center of the WebView main window.
+- Right panel always shows word-level subtitle editing (no tabs). Current toolbar order (M6.12+): Settings, Import JSON, Save Project, Export Plain Text, Export MP4. Buttons use circular `#D3E5EB` fill with no visible border.
+- Left-canvas font settings and right-editor font settings are independent. The left font controls the rendered reading canvas; the right font controls the editable transcript pane. The settings dialog opens centered in the WebView client area and can be dragged by its title bar.
 - The on-screen volume bar and its filename tooltip are removed. Volume keyboard shortcuts remain available. Transport time is centred **above the progress track**, and play/pause and stop buttons are placed to its right. Normal notices disappear after 5 seconds; errors require manual dismissal. Export progress has a separate persistent status while rendering; ordinary completion messages still expire in 5 seconds.
 - Window and HTML document title: `Transcript Studio`. `AllowCors` replaced by WebView2 `Allow` for local media host only; the UI host remains `DenyCors`.
 - All Git commit messages (subject and body) **must be in English**. No Git commit or push is performed by this archive.
@@ -41,7 +41,7 @@ Test multi-minute export, error notices, invalid/mismatched JSON, malformed word
 - The portable browser fallback cannot infer a file's sibling directory from a picked JSON without an additional folder permission. WPF is the reference import workflow.
 - MKV may require separate local transcoding support for WebView2 previews; currently unsupported codecs report an error instead of silently switching to audio.
 - Frame stepping on variable-frame-rate material seeks by the configured project FPS; it is not exact decoded-frame stepping.
-- Export status remains visible while rendering, but explicit cancellation and orphaned-process cleanup are not yet implemented.
+- Export status remains visible while rendering. The active notice can cancel the current task; the host terminates only the task's child-process tree and waits for cleanup. Closing during rendering offers `继续导出` / `取消导出并退出`; during the non-cancellable commit phase it waits for the save to finish.
 - Full Windows WPF build, actual WebView2 preview and actual MP4 export must be verified on a Windows machine; unavailable in this environment.
 
 **Important aspect-ratio case:** a 1920×1080 canvas paired with 16:9 source video will use all 1080 canvas pixels for video, leaving no text area. The layout correctly rejects that configuration; choose a taller canvas or a video with a different aspect ratio. M6 does not auto-crop or auto-shrink the video to create room for subtitles.
@@ -58,3 +58,8 @@ Test multi-minute export, error notices, invalid/mismatched JSON, malformed word
 - For very extreme output aspect ratios, a strict minimum 360-DIP preview might exceed the monitor's usable height. This version preserves the mandated minimum, which can cause the Windows window to extend off-screen; such ratios should be avoided or handled in a later screen-aware layout policy.
 
 Windows acceptance: resize rightwards, downwards, and diagonally, including maximization and restoring. Confirm the preview does not distort or recalculate pages; the transport remains flush with the preview and never wider, while the right panel consumes horizontal slack. Test both audio-only and video content, and compare MP4 pixel dimensions against project settings.
+
+
+## M6.12+ persistence update
+
+The M6.5 `.transcript-studio/projects/.../project.settings.json` location described in older notes is superseded. Current projects are stored at `<subtitle-directory>/<stem>/<stem>.project.json`; plain text exports are stored beside them as `<stem>.article.txt`. See `docs/M612_BREAKING_STORAGE_LAYOUT.md`.

@@ -9,7 +9,7 @@ test('M6.8: cancellation messages are accepted during export and target only dep
  assert.ok(host.indexOf('kind == "dependency-cancel"') < host.indexOf('if (exporting) return;'));
  assert.match(host,/dependencyInstallCancellation is \{ IsCancellationRequested: false \}/);
  assert.match(host,/active\.Cancel\(\)/);
- assert.match(host,/PrepareExportRuntimeAsync\(installCancellation\.Token\)/);
+ assert.match(host,/PrepareExportRuntimeAsync\(token\)/);
  assert.match(host,/dependencyInstallCancellation = null;/);
 });
 
@@ -26,8 +26,8 @@ test('M6.8: npm and browser preparation share a cancellation token and kill only
 test('M6.8: progress dialog has an actionable cancel button, cancellING state, and stops double cancellation',()=>{
  assert.match(ui,/desktop\?\.postMessage\(\{kind:'dependency-cancel'\}\)/);
  assert.match(ui,/mode:'cancelling'/);
- assert.match(ui,/dependencyDialog\.mode==='progress'\?<button[^>]+onClick=\{cancelDependencyInstall\}>取消安装<\/button>/);
- assert.match(ui,/dependencyDialog\.mode==='cancelling'\?<button[^>]+disabled>正在取消…<\/button>/);
+ assert.match(ui,/label:'取消安装',variant:'secondary',autoFocus:true,onClick:cancelDependencyInstall/);
+ assert.match(ui,/label:'正在取消…',variant:'secondary',disabled:true/);
  assert.match(ui,/dependency-cancelling/);
- assert.match(ui,/dependencyDialog\.mode==='progress'\)\{e\.preventDefault\(\);cancelDependencyInstall\(\)/);
+ assert.match(ui,/onEscape=\{dependencyDialog\.mode==='confirm'\?\(\)=>replyDependency\(false\):dependencyDialog\.mode==='progress'\?cancelDependencyInstall/);
 });

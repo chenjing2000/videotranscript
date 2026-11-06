@@ -53,6 +53,14 @@ test('M5: malformed or reversed source word timestamps rejected',()=>{
  const a=clone(data);a.segments[3].words[0].start=-10;reject(a,/时间/);
  const b=clone(data);b.segments[3].words[0].word='two tokens';reject(b,/单词/);
 });
+test('Code review: saved project rejects override IDs absent from the loaded transcript',()=>{
+ const words=okay(data).words;
+ const project=core.createProject('lesson.mp4','lesson.transcript-studio.json',words);
+ assert.equal(core.validateProject(project,words),true);
+ const stale=structuredClone(project);
+ stale.overrides.s999w999={display:'orphan'};
+ assert.equal(core.validateProject(stale,words),false);
+});
 test('Code review: saved project rejects malformed style, media kind and word edits',()=>{
  const words=okay(data).words;
  const p=core.createProject('lesson.mp4','lesson.transcript-studio.json',words);

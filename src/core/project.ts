@@ -4,7 +4,7 @@ export function createProject(videoName:string,subtitleName:string,words:Word[])
 export function saveProjectView(project:Project,words:Word[]):Project{return {...project,overrides:buildOverrides(words),savedAt:new Date().toISOString()}}
 export function normalizeProjectStyle(project:Project):Project {return {...project,canvas:project.canvas??{width:WIDTH,height:HEIGHT},style:{...DEFAULT_STYLE,...project.style,...(project.style.firstLineIndentCh===undefined&&project.style.firstLineIndentEm===undefined?{firstLineIndentEm:2}:{})}};}
 /** Reject malformed saved projects before they reach layout, editing or export. */
-export function validateProject(value:unknown):value is Project{
+export function validateProject(value:unknown,words?:readonly Word[]):value is Project{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const p=value as Partial<Project>;
  if(p.format!=='transcript-studio-project'||p.schemaVersion!==2)return false;
@@ -34,7 +34,9 @@ export function validateProject(value:unknown):value is Project{
  if(s.firstLineIndentCh!==undefined&&(!Number.isFinite(s.firstLineIndentCh)||s.firstLineIndentCh<0))return false;
  if(s.minScrollDuration!==undefined&&(!Number.isFinite(s.minScrollDuration)||s.minScrollDuration<0))return false;
  if(!p.overrides||typeof p.overrides!=='object'||Array.isArray(p.overrides))return false;
+ const validWordIds=words?new Set(words.map(word=>word.id)):null;
  for(const [id,override] of Object.entries(p.overrides)){
+  if(validWordIds&&!validWordIds.has(id))return false;
   if(!/^s\d+w\d+$/.test(id)||!override||typeof override!=='object'||Array.isArray(override))return false;
   if(override.display!==undefined&&(typeof override.display!=='string'||!override.display.trim()||/\s/u.test(override.display.trim())))return false;
   if(override.hidden!==undefined&&typeof override.hidden!=='boolean')return false;

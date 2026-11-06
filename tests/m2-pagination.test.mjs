@@ -176,13 +176,20 @@ test('M5: each nonfinal page cannot fit its next row, including paragraph gap',(
 });
 
 // Review regression: incomplete or corrupted external snapshots must not crash ReaderCanvas.
-test('Review: page-plan snapshots require valid nested rows, words, and switches',()=>{
+test('Review: page-plan snapshots require valid nested rows, words, switches and source binding',()=>{
  const core=require('../.tmp-core/index.js');
- const make=()=>core.paginate([{id:'s0w0',segmentId:'s0',original:'Hello',display:'Hello',start:0,end:1,hidden:false,breakParagraph:false}],core.DEFAULT_STYLE,1200,900,s=>s.length*20);
- const good=make();assert.equal(core.isPagePlan(good),true);
+ const words=[{id:'s0w0',segmentId:'s0',original:'Hello',display:'Hello',start:0,end:1,hidden:false,breakParagraph:false}];
+ const make=()=>core.paginate(words,core.DEFAULT_STYLE,1200,900,s=>s.length*20);
+ const good=make();assert.equal(core.isPagePlan(good),true);assert.equal(core.isPagePlan(good,words),true);
  const broken=structuredClone(good);broken.pages[0].rows[0].words[0].x='invalid';assert.equal(core.isPagePlan(broken),false);
  const missing=structuredClone(good);missing.pages[0].rows[0].words=null;assert.equal(core.isPagePlan(missing),false);
  const invalidSwitch=structuredClone(good);invalidSwitch.switches[0]=-1;assert.equal(core.isPagePlan(invalidSwitch),false);
+ const wrongSource=structuredClone(good);wrongSource.pages[0].rows[0].words[0].id='s9w9';assert.equal(core.isPagePlan(wrongSource,words),false);
+ const omitted=structuredClone(good);omitted.pages[0].rows[0].words=[];assert.equal(core.isPagePlan(omitted,words),false);
+ const extra=structuredClone(good);extra.pages[0].rows[0].words[0].index=1;assert.equal(core.isPagePlan(extra,words),false);
+ const outside=structuredClone(good);outside.pages[0].rows[0].top=outside.viewportHeight+1;assert.equal(core.isPagePlan(outside,words),false);
+ const overlap=structuredClone(good);overlap.pages[0].rows.push({...overlap.pages[0].rows[0],startWord:1,endWord:1,words:[{...overlap.pages[0].rows[0].words[0],index:1,id:'s0w1'}],top:0});assert.equal(core.isPagePlan(overlap),false);
+ const badSentence=structuredClone(good);badSentence.pages[0].rows[0].endsSentence='yes';assert.equal(core.isPagePlan(badSentence),false);
 });
 
 test('Review: hiding a word with breakParagraph does not merge neighboring paragraphs',()=>{

@@ -8,14 +8,54 @@ import argparse
 import copy
 import json
 import math
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 EXT = '.transcript-studio.json'
 ID = re.compile(r'^s(0|[1-9][0-9]*)w(0|[1-9][0-9]*)$')
 class ValidationError(ValueError): pass
+
 def fail(message): raise ValidationError(message)
+
+def normalized_path(path):
+    try:
+        return os.path.normcase(str(Path(path).expanduser().resolve()))
+    except (OSError, RuntimeError) as exc:
+        fail(f'无法解析文件路径 {path}: {exc}')
+
+def ensure_safe_output_paths(inputs, outputs):
+    input_paths={normalized_path(path) for path in inputs if path is not None}
+    output_paths=set()
+    for path in outputs:
+        if path is None: continue
+        key=normalized_path(path)
+        if key in input_paths:
+            fail(f'输出路径不能覆盖输入文件：{path}')
+        if key in output_paths:
+            fail(f'多个输出文件不能使用同一路径：{path}')
+        output_paths.add(key)
+
+def write_text_atomic(path, content, encoding='utf-8'):
+    temporary=None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', encoding=encoding, newline='',
+            dir=Path(path).parent, prefix=f'.{Path(path).name}.',
+            suffix='.tmp', delete=False
+        ) as stream:
+            temporary=Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except OSError as exc:
+        if temporary is not None:
+            try: temporary.unlink(missing_ok=True)
+            except OSError: pass
+        fail(f'无法写入文件 {path}: {exc}')
 def load(path):
     try: return json.loads(path.read_text(encoding='utf-8-sig'))
     except (OSError, ValueError) as exc: fail(f'无法读取 JSON {path}: {exc}')
@@ -68,12 +108,13 @@ def preview(data):
     return '\n\n'.join(paras)+'\n'
 
 def inspect(args):
+    ensure_safe_output_paths([args.input],[args.out])
     src=load(args.input);entries=words_of(src)
     result=['# Word-indexed transcript','','用全文语义与说话人转换判断段落，在每段末词后标记 `breakParagraph: true`。','']
     for si,seg in enumerate(src['segments']):
         result.extend([f'## Segment {si}',' '.join(f'[s{si}w{wi}] {w["word"]}' for wi,w in enumerate(seg['words'])),''])
     result='\n'.join(result)+'\n'
-    if args.out: args.out.write_text(result,encoding='utf-8')
+    if args.out: write_text_atomic(args.out,result,encoding='utf-8')
     else: print(result)
     print(f'检查：{len(entries)} 个单词',file=sys.stderr)
 
@@ -89,6 +130,7 @@ def read_decisions(path,ids):
     return decision
 
 def build(args):
+    ensure_safe_output_paths([args.input,args.boundaries],[args.output,args.preview])
     raw=load(args.input)
     if not isinstance(raw,dict) or any(k in raw for k in ('evr','transcript_studio','paragraphs')): fail('build 只接受原始 WhisperX，不支持旧格式迁移')
     entries=words_of(raw)
@@ -105,12 +147,13 @@ def build(args):
         out['segments'][si]['words'][wi]['breakParagraph']=True
     check(out,args.output)
     args.output.parent.mkdir(parents=True,exist_ok=True)
-    args.output.write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    if args.preview: args.preview.write_text(preview(out),encoding='utf-8')
+    write_text_atomic(args.output,json.dumps(out,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    if args.preview: write_text_atomic(args.preview,preview(out),encoding='utf-8')
     print(f'生成成功：{len(entries)} 词，{len(decision["breakAfterWordIds"])+1} 段')
 
 def edit(args):
     """Re-apply the complete reviewed boundary set to an existing v2 file."""
+    ensure_safe_output_paths([args.input,args.boundaries],[args.output,args.preview])
     original=load(args.input)
     entries=check(original,args.input)
     decision=read_decisions(args.boundaries,[ident for ident,_ in entries])
@@ -127,11 +170,12 @@ def edit(args):
         changed['transcript_studio']['displayOverrides']=decision['displayOverrides']
     check(changed,args.output)
     args.output.parent.mkdir(parents=True,exist_ok=True)
-    args.output.write_text(json.dumps(changed,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    if args.preview: args.preview.write_text(preview(changed),encoding='utf-8')
+    write_text_atomic(args.output,json.dumps(changed,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    if args.preview: write_text_atomic(args.preview,preview(changed),encoding='utf-8')
     print(f'重新分段成功：{len(entries)} 词，{len(decision["breakAfterWordIds"])+1} 段')
 
 def validate(args):
+    ensure_safe_output_paths([args.input,args.source],[args.preview])
     data=load(args.input);entries=check(data,args.input)
     if args.source:
         raw=load(args.source);words_of(raw)
@@ -139,7 +183,7 @@ def validate(args):
         for seg in cleaned['segments']:
             for w in seg['words']:w.pop('breakParagraph',None)
         if cleaned!=raw: fail('源文件内容发生变化（除允许新增的 breakParagraph/transcript_studio 外）')
-    if args.preview:args.preview.write_text(preview(data),encoding='utf-8')
+    if args.preview:write_text_atomic(args.preview,preview(data),encoding='utf-8')
     print(f'校验通过：{len(entries)} 词，{1+sum(w.get("breakParagraph") is True for _,w in entries)} 段')
 
 def main():

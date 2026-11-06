@@ -1,3 +1,5 @@
+> **Historical M6.5 note:** The project path described below was replaced by the M6.12 breaking storage layout. Current project and article paths are documented in `M612_BREAKING_STORAGE_LAYOUT.md` and `DATA_MODEL.md`.
+
 # Transcript Studio M6.5 — Settings and framework-dependent deployment
 
 ## Decisions

@@ -6,10 +6,10 @@ export function ReaderCanvas({words,style,time,videoHeight,video,canvasWidth,can
  const availableHeight=canvasHeight-videoHeight;
  const visible=useMemo(()=>words.filter(w=>!w.hidden),[words]);
  const plan=useMemo(()=>{
-  if(pagePlan&&isPagePlan(pagePlan))return pagePlan;
+  if(pagePlan&&pagePlan.viewportWidth===canvasWidth&&pagePlan.viewportHeight===availableHeight&&isPagePlan(pagePlan,visible))return pagePlan;
   if(availableHeight<=0)return null;
   return paginate(words,style,canvasWidth,availableHeight,measureWithCanvas(style.fontFamily,style.fontSize,style.fontWeight));
- },[pagePlan,words,style,availableHeight]);
+ },[pagePlan,words,visible,style,canvasWidth,availableHeight]);
  const index=plan?pageAtTime(plan,time):-1;
  const page=index>=0?plan?.pages[index]:null;
  return <div data-reader-time={time} data-page-index={index} data-page-count={plan?.pages.length??0} style={{width:canvasWidth,height:canvasHeight,overflow:'hidden',background:style.backgroundColor,position:'relative'}}>

@@ -7,3 +7,13 @@ export function calculateWordEditorWidth(textWidth:number,availableWidth:number)
 export function paragraphActionLabel(hasBreak:boolean):'插入分段'|'取消分段'{
  return hasBreak?'取消分段':'插入分段';
 }
+
+/** An inline draft is unsaved only when its text differs from the current word. */
+export function hasUnsavedWordDraft(
+ words:readonly {id:string;display:string}[],
+ draft:{id:string;text:string}|null
+):boolean{
+ if(!draft)return false;
+ const word=words.find(item=>item.id===draft.id);
+ return word!==undefined&&word.display!==draft.text;
+}

@@ -1,3 +1,7 @@
+# Transcript Studio — M6.15.6.2
+
+> Current source includes the WPF single-instance/tray lifecycle, project-local export cache, cancellable rendering, validated MP4 commit, revision-based unsaved-state tracking and unified Fluent dialogs with viewport-safe layout. See `M6.15_RELEASE_NOTES.md`, `docs/M615_EXPORT_LIFECYCLE.md`, and `docs/M614_SINGLE_INSTANCE_AND_TRAY.md`.
+
 # Transcript Studio — M6
 
 Windows reading-video editor based on **WPF (.NET 10) + WebView2 + React/TypeScript + Remotion**. Import a Transcript Studio v2 JSON file, automatically locate same-stem media, edit timestamped words, and export an MP4 in a configurable resolution.
@@ -28,7 +32,7 @@ dotnet publish desktop/TranscriptStudio.csproj -c Release -o dist/wpf
 npm.cmd run export -- --media "video/Lesson.mp3" --json "video/Lesson.transcript-studio.json" --out "video/exports/Lesson.mp4"
 ```
 
-Use `--project path/to/Lesson.project.json` for customized canvas size, editing overrides and typography. Requires FFmpeg/ffprobe for media inspection (or explicitly supplied media duration in the desktop path). Default canvas is 1200×1600. Output supports any even width/height in the configured range 320–3840.
+Use `--project path/to/Lesson.project.json` for customized canvas size, editing overrides and typography. `--cache-dir path/to/cache` is optional; when omitted, the CLI creates `.transcript-studio-cache/` beside the output file. The desktop app supplies its own project-local task cache and media metadata. CLI export uses `ffprobe` to inspect media when duration or video dimensions are not supplied. Default canvas is 1200×1600. Output supports any even width/height in the configured range 320–3840.
 
 ## Architecture and review
 
@@ -46,8 +50,8 @@ All Git commit messages must be in **English**; prefer Conventional Commits such
 The left canvas preview keeps the project output aspect ratio and is never less than 360 DIP wide. A 3-DIP inset frames both sides and the top; the progress controls touch the bottom of the preview, with 3 DIP below. The right transcript editor takes the remaining window width (minimum 240 DIP). The volume slider has been removed from the transport. Change the final exported MP4 width and height in **Settings → 输出视频尺寸**; resizing the app window changes preview scale only. See `docs/M6_IMPLEMENTATION_AND_VALIDATION.md` for the exact geometry and Windows acceptance tests.
 
 
-## M6.5 configuration and framework-dependent deployment
+## Framework-dependent deployment
 
-Portable application preferences: `voicetranscript.settings.json` next to `TranscriptStudio.exe` (created on first launch). Each video uses `<video-dir>/.transcript-studio/projects/<video-stem>/project.settings.json`.
+Portable application preferences: `voicetranscript.settings.json` next to `TranscriptStudio.exe` (created on first launch). For `Lesson.transcript-studio.json`, the current work directory is `Lesson/`, containing `Lesson.project.json`, `Lesson.exported.mp4` (after MP4 export), `Lesson.article.txt` (after text export), and a `cache/` directory for temporary render data. This is the M6.12 breaking storage layout; the legacy `.transcript-studio/projects/.../project.settings.json` path is not read or migrated.
 The right editor font family/size/colors are independent of video typography; standard left-font and output defaults are stored globally but existing projects retain their own layouts.
 Windows deployment: `npm.cmd run verify` then `dotnet publish desktop/TranscriptStudio.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/wpf`. Distribute the resulting EXE after verifying the single-file output. The user installs .NET Desktop Runtime 10 and WebView2; Node.js 22+ is required only to export MP4. No system prerequisites are automatically installed by the app. On the first export, the program can prepare locked npm packages and Remotion's rendering browser with consent. See `docs/M65_SETTINGS_AND_DEPLOYMENT.md`.

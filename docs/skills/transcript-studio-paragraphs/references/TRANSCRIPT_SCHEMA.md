@@ -31,6 +31,6 @@ The example illustrates format, not speech recognition. The final word must not 
 
 `transcript_studio.displayOverrides` is an optional mapping keyed by generated word IDs such as `s0w1`, mapping to a single-token displayed alternative. It must not modify source timing or word text. Those IDs are generated from zero-based `segments` and `words` indices, and are not added to the JSON source words.
 
-Internal program words and project override files use `breakParagraph: boolean`. A project override of `false` explicitly removes a source mark; absence means inherit. The project format is `transcript-studio-project` v2, at `.transcript-studio/projects/<stem>.project.json`. Old projects are not loaded.
+Internal program words and project override files use `breakParagraph: boolean`. A project override of `false` explicitly removes a source mark; absence means inherit. The project format is `transcript-studio-project` v2, stored at `<subtitle-directory>/<stem>/<stem>.project.json`. The old `.transcript-studio/projects/.../project.settings.json` path is not loaded or migrated.
 
 Time checks: each word must have finite nonnegative `start` and `end > start`; word starts must be nondecreasing; overlapping word end/start intervals can exist, but may produce page-switch warnings. Every segment must have at least one word. No final-word break. Unknown `transcript_studio` keys are rejected.

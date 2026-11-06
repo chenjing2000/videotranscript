@@ -9,7 +9,7 @@ namespace TranscriptStudio;
 /// endpoint. Unlike dynamic folder mappings, this endpoint supports HTTP byte ranges
 /// and cannot expose other files from the user's media directory.
 /// </summary>
-internal sealed class LocalMediaServer
+internal sealed class LocalMediaServer : IDisposable
 {
     private const string MediaHost = "media.transcript-studio.test";
     private const string Prefix = "https://" + MediaHost + "/media/";
@@ -40,6 +40,8 @@ internal sealed class LocalMediaServer
         if (!Uri.TryCreate(request.Uri, UriKind.Absolute, out var uri) ||
             uri.Host != MediaHost || !uri.AbsolutePath.StartsWith("/media/", StringComparison.Ordinal)) return;
 
+        FileStream? file = null;
+        Stream? responseBody = null;
         try
         {
             var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -60,12 +62,14 @@ internal sealed class LocalMediaServer
                 Reply(e, Stream.Null, 405, "Method Not Allowed", "Content-Length: 0\r\nAllow: GET, HEAD, OPTIONS");
                 return;
             }
-            var file = new FileStream(selectedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+            file = new FileStream(selectedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var size = file.Length;
             var rangeHeader = request.Headers.Contains("Range") ? request.Headers.GetHeader("Range") : null;
             if (!MediaByteRanges.TryResolve(rangeHeader, size, out var start, out var end))
             {
                 file.Dispose();
+                file = null;
                 Reply(e, Stream.Null, 416, "Range Not Satisfiable", $"Content-Range: bytes */{size}\r\nContent-Length: 0");
                 return;
             }
@@ -78,22 +82,26 @@ internal sealed class LocalMediaServer
             };
             var headers = $"Content-Type: {mime}\r\nAccept-Ranges: bytes\r\nContent-Length: {length}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff";
             if (partial) headers += $"\r\nContent-Range: bytes {start}-{end}/{size}";
-            Stream body;
             if (request.Method == "HEAD" || length == 0)
             {
                 file.Dispose();
-                body = Stream.Null;
+                file = null;
+                responseBody = Stream.Null;
             }
             else
             {
                 file.Position = start;
-                body = new LimitedReadStream(file, start, length);
+                responseBody = new LimitedReadStream(file, start, length);
+                file = null; // LimitedReadStream now owns the file handle.
             }
-            Reply(e, body, partial ? 206 : 200, partial ? "Partial Content" : "OK", headers);
+            Reply(e, responseBody ?? Stream.Null, partial ? 206 : 200, partial ? "Partial Content" : "OK", headers);
+            responseBody = null; // Ownership transferred to WebView2.
             Trace.WriteLine($"Transcript Studio media: {request.Method} {(partial ? "206" : "200")} {Path.GetFileName(selectedPath)} range={rangeHeader ?? "all"}");
         }
         catch (Exception error)
         {
+            responseBody?.Dispose();
+            file?.Dispose();
             Trace.WriteLine("Transcript Studio media read failed: " + error);
             Reply(e, Stream.Null, 500, "Media Read Error", "Content-Length: 0");
         }
@@ -155,4 +163,11 @@ internal sealed class LocalMediaServer
         protected override void Dispose(bool disposing)
         { if (disposing) file.Dispose(); base.Dispose(disposing); }
     }
+    public void Dispose()
+    {
+        browser.WebResourceRequested -= Respond;
+        selectedPath = null;
+        selectedToken = null;
+    }
+
 }

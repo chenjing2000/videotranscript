@@ -1,3 +1,5 @@
+> **Historical M5 instructions.** This document refers to the old `EnglishVideoMaker` checkout and must not be used as setup instructions for the current Transcript Studio M6.15 project. It is retained only as project history.
+
 # Git setup — Transcript Studio M5
 
 This package contains source for the existing local project; do **not** assume a new public repository exists or change your Git remote as part of installation.

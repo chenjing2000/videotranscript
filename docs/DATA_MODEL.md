@@ -1,28 +1,49 @@
-# Transcript Studio M5 — Data model and persistence
+# Transcript Studio — current data model (M6.15.2)
 
-## Input
-WhisperX raw JSON is only a source for the Skill; the app accepts `<video-stem>.transcript-studio.json` with `transcript_studio: {format:"transcript-studio", schemaVersion:2}`. Paragraphs are marked solely with optional `segments[].words[].breakParagraph:true`; final word never marked. `word_segments` stays original and untagged.
+## Subtitle input
 
-The parser assigns internal stable IDs `s<segmentIndex>w<wordIndex>` (indices zero-based). Each word has immutable `original`, `start`, `end`, `score`, with editable `display`, `hidden`, `breakParagraph`. `sourceBreakParagraph` and `sourceDisplay` are runtime baselines; they are not input fields.
+The app accepts only `<stem>.transcript-studio.json` with:
 
-## Project
-Persist under `<video-dir>/.transcript-studio/projects/<stem>/project.settings.json`. Strict project schema:
+- `language: "en"`;
+- `transcript_studio.format: "transcript-studio"`;
+- `transcript_studio.schemaVersion: 2`;
+- word-local `segments[].words[].breakParagraph: true` markers.
 
-```json
-{
-  "format": "transcript-studio-project",
-  "schemaVersion": 2,
-  "source": {"videoName":"lesson.mp4","subtitleName":"lesson.transcript-studio.json","subtitleSha256":"HEX_HASH"},
-  "overrides": {"s10w38":{"breakParagraph":false}},
-  "style": {},
-  "export": {"fps":30,"quality":"high"}
-}
+An omitted `breakParagraph` means no boundary. `false`, `null`, strings and numbers are invalid in subtitle input. The final word cannot carry a marker. `word_segments` remains an unchanged WhisperX copy without paragraph markers. The parser generates internal IDs `s<segmentIndex>w<wordIndex>`; IDs are not written into source words.
+
+## Runtime word model
+
+Each parsed word contains its stable ID, segment ID, original text, display text, source/display baselines, start/end times, optional score, hidden state and effective paragraph-break state. Editing display text never changes source timestamps. Hiding a word does not erase a paragraph boundary attached to that word; layout and plain-text export preserve the visible boundary without emitting the hidden token.
+
+## Project model
+
+Project files remain `format: "transcript-studio-project"`, `schemaVersion: 2`. They contain source media/subtitle names, subtitle SHA-256, sparse word overrides, canvas dimensions, reading style and export settings.
+
+For `lesson01.transcript-studio.json`, the current path is:
+
+```text
+<subtitle-directory>/
+├── lesson01.transcript-studio.json
+├── lesson01.mp4                 # or .mkv / .mp3 / .wav
+└── lesson01/
+    ├── lesson01.project.json
+    ├── lesson01.exported.mp4       # created after successful MP4 export
+    ├── lesson01.article.txt        # created after plain-text export
+    └── cache/                      # temporary task data; failed renders may be retained for recovery
 ```
 
-`style` in the example is abbreviated: actual saved projects contain the ReadingStyle properties. An override's `breakParagraph:true` adds a boundary, `false` removes it, omitted means inherit source. The source file is immutable. Projects are saved atomically with a backup and validated against the source hash. Old project schema is not supported; there is no migration tool.
+M6.12 intentionally removed legacy project discovery and migration. The old `.transcript-studio/projects/<stem>/project.settings.json` path is not read, moved or deleted. The new work directory is created on first project save, plain-text export or MP4 export, not on import. Existing project files at the new path are validated before the host unlocks overwrite; a corrupt or mismatched project is not silently replaced.
 
-## Export
-Export jobs receive a snapshot of edited project and page geometry. Save under `<video-dir>/exports/<stem>_reading.mp4` (append numeric suffix on collision). Keep input MP4/JSON and project immutable during the export. The CLI can also derive its layout when no desktop plan is supplied.
+An override can contain `display`, `hidden` and/or `breakParagraph`. `breakParagraph: true` adds a boundary, `false` removes a source boundary, and omission inherits the source value. Source subtitle bytes remain unchanged.
 
-## Global runtime
-WPF WebView2 profile uses `%LOCALAPPDATA%/TranscriptStudio/WebView2`. A later application Settings feature may use `%APPDATA%/TranscriptStudio/settings.json`; it is not part of the current M5 prototype.
+## Plain-text article export
+
+The current right-pane visible text is written to `<subtitle-directory>/<stem>/<stem>.article.txt` without a file picker. Output is UTF-8 without BOM, Windows CRLF, one blank line between paragraphs, no trailing blank line, no timestamps or styling, and no automatic spelling/punctuation correction. Hidden tokens are omitted while their paragraph boundary is retained. Exporting text does not save the project or clear its dirty state.
+
+## MP4 export
+
+The WPF host passes an immutable project and page-plan snapshot to Remotion. The renderer uses the selected media once (video audio remains part of `OffthreadVideo`; audio-only sources use one `Audio` component). The default desktop MP4 output is `<subtitle-directory>/<stem>/<stem>.exported.mp4`, in the same directory as `<stem>.project.json`. Temporary render data is isolated under that work directory's `cache/render/job-<guid>/` and `cache/temp/` folders. A failed final commit retains the rendered `<stem>.exported-<guid>.mp4.tmp` for manual recovery. The project and source subtitle are not modified by rendering.
+
+## Global settings
+
+`voicetranscript.settings.json` lives beside `TranscriptStudio.exe`, is created with defaults on first launch and is atomically replaced after valid setting changes. It is separate from per-subtitle project files.

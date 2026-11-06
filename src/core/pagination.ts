@@ -96,16 +96,18 @@ export function pageAtTime(plan:PagePlan,time:number){
 }
 /** Validate the shape and basic invariants of an external page-plan snapshot.
  * This is a guard for rendering, not a replacement for source fingerprint checks. */
-export function isPagePlan(v:unknown):v is PagePlan{
+export function isPagePlan(v:unknown,words?:readonly Word[]):v is PagePlan{
  if(!v||typeof v!=='object'||Array.isArray(v))return false;
  const p=v as Partial<PagePlan>;
  const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
  if(!Array.isArray(p.pages)||!Array.isArray(p.switches)||
-    p.pages.length!==p.switches.length||!Array.isArray(p.warnings)||
+    p.pages.length!==p.switches.length||!Array.isArray(p.warnings)||p.warnings.some(w=>typeof w!=='string')||
     !finite(p.availableHeight)||p.availableHeight<=0||
     !finite(p.availableWidth)||p.availableWidth<=0||
     !finite(p.viewportHeight)||p.viewportHeight<=0||
-    !finite(p.viewportWidth)||p.viewportWidth<=0)return false;
+    !finite(p.viewportWidth)||p.viewportWidth<=0||
+    p.availableHeight>p.viewportHeight||p.availableWidth>p.viewportWidth)return false;
+ if(p.pages.length>0&&p.switches[0]!==0)return false;
  let lastSwitch=-Infinity;
  for(let i=0;i<p.pages.length;i++){
   const sw=p.switches[i];
@@ -114,19 +116,43 @@ export function isPagePlan(v:unknown):v is PagePlan{
   const page=p.pages[i];
   if(!page||typeof page!=='object'||page.index!==i||!Array.isArray(page.rows)||!page.rows.length||
      typeof page.firstWordId!=='string'||typeof page.lastWordId!=='string'||
-     !finite(page.firstStart)||!finite(page.lastEnd)||!finite(page.usedHeight)||page.usedHeight<0)return false;
-  let previousTop=-Infinity;
+     !finite(page.firstStart)||page.firstStart<0||!finite(page.lastEnd)||page.lastEnd<=page.firstStart||
+     !finite(page.usedHeight)||page.usedHeight<0||page.usedHeight>p.availableHeight+EPS)return false;
+  let previousBottom=-Infinity;
   for(const row of page.rows){
    if(!row||typeof row!=='object'||!Array.isArray(row.words)||!row.words.length||
       !Number.isInteger(row.startWord)||!Number.isInteger(row.endWord)||row.startWord<0||row.endWord<row.startWord||
-      !finite(row.top)||!finite(row.height)||row.height<=0||row.top<previousTop||
-      typeof row.paragraphStart!=='boolean'||typeof row.paragraphEnd!=='boolean')return false;
-   previousTop=row.top;
-   for(const word of row.words){
-    if(!word||typeof word!=='object'||!Number.isInteger(word.index)||word.index<0||
+      !finite(row.top)||row.top<0||!finite(row.height)||row.height<=0||
+      row.top<previousBottom-EPS||row.top+row.height>p.viewportHeight+EPS||
+      typeof row.paragraphStart!=='boolean'||typeof row.paragraphEnd!=='boolean'||
+      typeof row.endsSentence!=='boolean'||row.words.length!==row.endWord-row.startWord+1)return false;
+   previousBottom=row.top+row.height;
+   for(let wi=0;wi<row.words.length;wi++){
+    const word=row.words[wi];
+    if(!word||typeof word!=='object'||!Number.isInteger(word.index)||word.index!==row.startWord+wi||
        typeof word.id!=='string'||!finite(word.x)||!finite(word.width)||word.width<0)return false;
    }
   }
+ }
+ if(words){
+  const expected=words.filter(word=>!word.hidden);
+  let cursor=0;
+  for(const page of p.pages){
+   const firstPageIndex=cursor;
+   for(const row of page.rows){
+    if(row.startWord!==cursor)return false;
+    for(const item of row.words){
+     const source=expected[cursor];
+     if(!source||item.index!==cursor||item.id!==source.id)return false;
+     cursor++;
+    }
+    if(row.endWord!==cursor-1)return false;
+   }
+   const first=expected[firstPageIndex],last=expected[cursor-1];
+   if(!first||!last||page.firstWordId!==first.id||page.lastWordId!==last.id||
+      page.firstStart!==first.start||page.lastEnd!==last.end)return false;
+  }
+  if(cursor!==expected.length)return false;
  }
  return true;
 }

@@ -10,7 +10,7 @@ internal static class M1Capture
         Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(Path.Combine(directory, "snapshot.json"), snapshot.GetRawText());
 
-        const string media = "document.querySelector('video')";
+        const string media = "document.querySelector('video, audio')";
         var original = JsonSerializer.Deserialize<double>(await view.ExecuteScriptAsync(media + ".currentTime"));
         var wasPaused = await view.ExecuteScriptAsync(media + ".paused") == "true";
         await view.ExecuteScriptAsync(media + ".pause()");

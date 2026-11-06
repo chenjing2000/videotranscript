@@ -60,4 +60,54 @@ class TestTranscriptTool(unittest.TestCase):
                 path.write_text(json.dumps({'breakAfterWordIds':bad}),encoding='utf-8')
                 with self.assertRaises(mod.ValidationError):mod.read_decisions(path,ids)
 
+
+    def test_inspect_rejects_output_that_would_overwrite_input(self):
+        with tempfile.TemporaryDirectory() as folder:
+            src=Path(folder)/'source.json'
+            src.write_text(json.dumps(self.raw),encoding='utf-8')
+            before=src.read_bytes()
+            with self.assertRaises(mod.ValidationError):
+                mod.inspect(type('Args',(),{'input':src,'out':src}))
+            self.assertEqual(src.read_bytes(),before)
+
+    def test_build_rejects_output_or_preview_input_collisions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            d=Path(folder);src=d/'input.json';src.write_text(json.dumps(self.raw),encoding='utf-8')
+            decisions=d/'decisions.json';decisions.write_text(json.dumps({'breakAfterWordIds':['s3w2']}),encoding='utf-8')
+            before_src=src.read_bytes();before_decisions=decisions.read_bytes()
+            with self.assertRaises(mod.ValidationError):
+                mod.build(type('Args',(),{'input':src,'boundaries':decisions,'output':decisions,'preview':None,'force':True}))
+            with self.assertRaises(mod.ValidationError):
+                mod.build(type('Args',(),{'input':src,'boundaries':decisions,'output':d/'out.transcript-studio.json','preview':src,'force':True}))
+            self.assertEqual(src.read_bytes(),before_src)
+            self.assertEqual(decisions.read_bytes(),before_decisions)
+
+    def test_edit_rejects_output_or_preview_collisions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            d=Path(folder);src=d/'input.transcript-studio.json'
+            fixture=SOURCE.with_name('6 Minute English 01-seg1.transcript-studio.json')
+            src.write_bytes(fixture.read_bytes())
+            decisions=d/'decisions.json';decisions.write_text(json.dumps({'breakAfterWordIds':['s10w38']}),encoding='utf-8')
+            before_src=src.read_bytes();before_decisions=decisions.read_bytes()
+            with self.assertRaises(mod.ValidationError):
+                mod.edit(type('Args',(),{'input':src,'boundaries':decisions,'output':decisions,'preview':None,'force':True}))
+            with self.assertRaises(mod.ValidationError):
+                mod.edit(type('Args',(),{'input':src,'boundaries':decisions,'output':d/'out.transcript-studio.json','preview':src,'force':True}))
+            self.assertEqual(src.read_bytes(),before_src)
+            self.assertEqual(decisions.read_bytes(),before_decisions)
+
+    def test_validate_rejects_preview_that_would_overwrite_input_or_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            d=Path(folder)
+            fixture=SOURCE.with_name('6 Minute English 01-seg1.transcript-studio.json')
+            subtitle=d/'input.transcript-studio.json';subtitle.write_bytes(fixture.read_bytes())
+            raw=d/'raw.json';raw.write_text(json.dumps(self.raw),encoding='utf-8')
+            before_subtitle=subtitle.read_bytes();before_raw=raw.read_bytes()
+            with self.assertRaises(mod.ValidationError):
+                mod.validate(type('Args',(),{'input':subtitle,'source':raw,'preview':subtitle}))
+            with self.assertRaises(mod.ValidationError):
+                mod.validate(type('Args',(),{'input':subtitle,'source':raw,'preview':raw}))
+            self.assertEqual(subtitle.read_bytes(),before_subtitle)
+            self.assertEqual(raw.read_bytes(),before_raw)
+
 if __name__=='__main__':unittest.main()

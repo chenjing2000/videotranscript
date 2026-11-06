@@ -2,35 +2,42 @@ import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ReaderCanvas} from './ui/ReaderCanvas';
 import {StyleSettings} from './ui/StyleSettings';
-import {parseTranscriptStudio,applyOverrides,createProject,updateWord,saveProjectView,validateProject,paginate,measureWithCanvas,DEFAULT_STYLE,normalizeProjectStyle,WIDTH,HEIGHT,validCanvas,transcriptStem,selectCompanion,provisionalVideoHeight,describeMediaError,missingCompanionMessage} from './core';
-import type {Word,Project,TranscriptStudioInput} from './core';
+import {Dialog} from './ui/Dialog';
+import type {DialogAction} from './ui/Dialog';
+import {parseTranscriptStudio,applyOverrides,createProject,updateWord,exportPlainText,saveProjectView,validateProject,paginate,measureWithCanvas,DEFAULT_STYLE,normalizeProjectStyle,WIDTH,HEIGHT,validCanvas,transcriptStem,selectCompanion,provisionalVideoHeight,describeMediaError,missingCompanionMessage} from './core';
+import type {Word,Project} from './core';
 import {resolvePlayerShortcut} from './core/player-shortcuts';
 import './style.css';
 import {getWorkspaceLayout} from './core/workspace-layout';
 import {DEFAULT_SETTINGS,settingsToStyle,projectStyleToSettings,validateSettings} from './core/app-settings';
-import {calculateWordEditorWidth,paragraphActionLabel} from './core/word-editing';
+import {calculateWordEditorWidth,paragraphActionLabel,hasUnsavedWordDraft} from './core/word-editing';
+import {createProjectEditState,markProjectEdited,setProjectDraftChanged,acknowledgeProjectSave,resetProjectEditState,hasUnsavedProjectChanges} from './core/project-edit-state';
 import {settingsDialogRect,nextSettingsWidth,requiredSettingsOuterWidth} from './core/settings-dialog-geometry';
 import type {AppSettings} from './core/app-settings';
 type DesktopMessage =
  | {kind:'pair';mediaName:string;mediaKind:'video'|'audio';subtitleName:string;transcript:string;fingerprint:string;project:string|null;mediaUrl:string}
  | {kind:'settings';settings:unknown}
- | {kind:'saved';message:string}
- | {kind:'status';message:string;busy:boolean;error?:boolean}
+ | {kind:'saved';message:string;revision:number}
+ | {kind:'text-exported';message:string}
+ | {kind:'text-export-error';message:string}
+ | {kind:'status';message:string;busy:boolean;error?:boolean;canCancel?:boolean}
  | {kind:'dependency-confirm';id:number;title:string;heading:string;details:string;action:string}
  | {kind:'dependency-progress';title:string;message:string}
  | {kind:'dependency-failed';message:string}
  | {kind:'dependency-end'}
- | {kind:'dependency-cancelling'};
+ | {kind:'dependency-cancelling'}
+  | {kind:'export-cancelling'};
 const desktop=(window as Window & {chrome?:{webview?:{postMessage(m:unknown):void;postMessageWithAdditionalObjects(m:unknown,files:File[]):void;addEventListener(t:'message',l:(e:MessageEvent<DesktopMessage>)=>void):void;removeEventListener(t:'message',l:(e:MessageEvent<DesktopMessage>)=>void):void}}}).chrome?.webview;
-type Notice={id:number;text:string;error:boolean};
+type Notice={id:number;text:string;error:boolean;task?:boolean;cancelable?:boolean};
 type DependencyDialog=
  | {mode:'confirm';id:number;title:string;heading:string;details:string;action:string}
  | {mode:'progress';title:string;message:string}
  | {mode:'cancelling';title:string;message:string}
  | {mode:'error';message:string};
-function Icon({name}:{name:'settings'|'save'|'import'|'export'|'play'|'pause'|'stop'|'close'}){
+function Icon({name}:{name:'settings'|'text-export'|'save'|'import'|'export'|'play'|'pause'|'stop'|'close'}){
  const paths:Record<typeof name,React.ReactNode>={
  settings:<><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="#fff"/><circle cx="16" cy="12" r="2" fill="#fff"/><circle cx="10" cy="18" r="2" fill="#fff"/></>,
+ 'text-export':<><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v5h5M8 12h8M8 16h8"/></>,
  save:<><path d="M4 3h13l3 3v15H4z"/><path d="M7 3v7h10V3M7 21v-8h10v8"/></>,
  import:<><path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/></>,
  export:<><path d="M12 21V9m-4 4 4-4 4 4M4 7V3h16v4"/></>,
@@ -68,11 +75,15 @@ function App(){
  const [toolLeaving,setToolLeaving]=useState(false);
  const transcriptRef=useRef<HTMLDivElement|null>(null);
  const [editorAvailableWidth,setEditorAvailableWidth]=useState(240);
- const [dirty,setDirty]=useState(false);const [playing,setPlaying]=useState(false);const [exporting,setExporting]=useState(false);const [exportStatus,setExportStatus]=useState('');
+ const [projectLoadBlocked,setProjectLoadBlocked]=useState(false);
+ const [projectEditState,setProjectEditState]=useState(createProjectEditState());
+ const projectEditStateRef=useRef(projectEditState);
+ const wordsRef=useRef<Word[]>([]);wordsRef.current=words;
+ const [playing,setPlaying]=useState(false);const [exporting,setExporting]=useState(false);
  const [appSettings,setAppSettings]=useState<AppSettings>(DEFAULT_SETTINGS);const appSettingsRef=useRef<AppSettings>(DEFAULT_SETTINGS);const loadedSettingsRef=useRef(false);
  const [dependencyDialog,setDependencyDialog]=useState<DependencyDialog|null>(null);
+ const [pendingImportFile,setPendingImportFile]=useState<File|null>(null);
  const dependencyDialogRef=useRef<DependencyDialog|null>(null);
- const dependencyDefaultButton=useRef<HTMLButtonElement|null>(null);
  const [settingsOpen,setSettingsOpen]=useState(false);
  const [settingsPosition,setSettingsPosition]=useState<{x:number;y:number}|null>(null);
  const [settingsPreferredWidth,setSettingsPreferredWidth]=useState<number|null>(null);
@@ -81,10 +92,17 @@ function App(){
  const [viewport,setViewport]=useState({width:window.innerWidth,height:window.innerHeight});const [notices,setNotices]=useState<Notice[]>([]);
  const shortcutRef=useRef<(e:KeyboardEvent)=>void>(()=>{});
  const mediaRef=useRef<HTMLMediaElement|null>(null);const inputRef=useRef<HTMLInputElement>(null);
- const sourceRef=useRef<TranscriptStudioInput|null>(null);const nextNoticeId=useRef(1);
+ const nextNoticeId=useRef(1);const exportNoticeId=useRef<number|null>(null);
  const canvasWidth=project?.canvas.width??appSettings.output.width,canvasHeight=project?.canvas.height??appSettings.output.height;
  useEffect(()=>{const update=()=>setViewport({width:window.innerWidth,height:window.innerHeight});window.addEventListener('resize',update);return()=>window.removeEventListener('resize',update)},[]);
  const settingsRect=settingsDialogRect(viewport.width,viewport.height,settingsPosition,settingsPreferredWidth??undefined);
+ const hasUnsavedChanges=()=>hasUnsavedProjectChanges(projectEditStateRef.current);
+ const updateProjectEditState=(next:ReturnType<typeof createProjectEditState>)=>{
+  projectEditStateRef.current=next;setProjectEditState(next);
+  desktop?.postMessage({kind:'dirty-state',dirty:hasUnsavedProjectChanges(next)});
+ };
+ const markDirty=()=>updateProjectEditState(markProjectEdited(projectEditStateRef.current));
+ const resetProjectDirtyState=()=>updateProjectEditState(resetProjectEditState(projectEditStateRef.current));
  const closeSettings=()=>{settingsDrag.current=null;setSettingsPosition(null);setSettingsOpen(false)};
  const openSettings=()=>{settingsDrag.current=null;setSettingsPosition(null);setSettingsPreferredWidth(null);setSettingsOpen(true)};
  // Measure after mounting, before first paint; do not resize during ordinary editing.
@@ -129,7 +147,7 @@ function App(){
  },[]);
  const editorFontSize=appSettings.rightFont.size;
  const style=project?.style??settingsToStyle(appSettings);
- const displayedSettings=project?projectStyleToSettings(style,project.canvas,appSettings):appSettings;
+ const displayedSettings=useMemo(()=>project?projectStyleToSettings(style,project.canvas,appSettings):appSettings,[project,style,appSettings]);
  const setDependency=(value:DependencyDialog|null)=>{dependencyDialogRef.current=value;setDependencyDialog(value)};
  const cancelDependencyInstall=()=>{const d=dependencyDialogRef.current;if(d?.mode!=='progress')return;setDependency({mode:'cancelling',title:d.title,message:'正在停止安装任务并清理临时文件……'});desktop?.postMessage({kind:'dependency-cancel'})};
  const replyDependency=(accepted:boolean)=>{const d=dependencyDialogRef.current;if(d?.mode!=='confirm')return;desktop?.postMessage({kind:'dependency-decision',id:d.id,accepted});setDependency(accepted?{mode:'progress',title:d.title,message:'正在启动依赖准备操作……'}:null)};
@@ -137,25 +155,114 @@ function App(){
   const id=nextNoticeId.current++;setNotices(prev=>[...prev,{id,text,error}]);
   if(!error)setTimeout(()=>setNotices(prev=>prev.filter(x=>x.id!==id)),5000);
  };
+ // A single persistent toast represents the active MP4 export task. Host status
+ // updates replace its text instead of creating duplicate messages.
+ const setExportTaskNotice=(text:string,cancelable=true)=>{
+  let id=exportNoticeId.current;
+  if(id===null){id=nextNoticeId.current++;exportNoticeId.current=id}
+  setNotices(prev=>prev.some(n=>n.id===id)
+   ?prev.map(n=>n.id===id?{...n,text,error:false,task:true,cancelable}:n)
+   :[...prev,{id,text,error:false,task:true,cancelable}]);
+ };
+ const cancelExport=()=>{
+  if(exportNoticeId.current===null)return;
+  setExportTaskNotice('正在取消导出，等待渲染进程退出并清理缓存…',false);
+  desktop?.postMessage({kind:'export-cancel'});
+ };
+  const clearExportTaskNotice=()=>{
+  const id=exportNoticeId.current;
+  if(id===null)return;
+  exportNoticeId.current=null;
+  setNotices(prev=>prev.filter(n=>n.id!==id));
+ };
  useEffect(()=>{let frame=0;const tick=()=>{if(mediaRef.current)setTime(mediaRef.current.currentTime);frame=requestAnimationFrame(tick)};frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame)},[]);
  const plan=useMemo(()=>{if(!words.length||canvasHeight-mediaHeight<=0)return undefined;try{return paginate(words,style,canvasWidth,canvasHeight-mediaHeight,measureWithCanvas(style.fontFamily,style.fontSize,style.fontWeight))}catch{return undefined}},[words,style,canvasWidth,canvasHeight,mediaHeight]);
  const seek=(t:number)=>{const v=mediaRef.current;if(!v)return;v.currentTime=Math.max(0,Math.min(Number.isFinite(v.duration)?v.duration:t,t));setTime(v.currentTime)};
  const toggle=()=>{const v=mediaRef.current;if(v){if(v.paused)void v.play().catch(e=>notify(`播放失败：${String(e)}`,true));else v.pause()}};
  const stop=()=>{mediaRef.current?.pause();seek(0)};
  const openPicker=()=>{if(!exporting)inputRef.current?.click()};
- const doSave=()=>{if(!project)return notify('尚未打开标准字幕',true);const p=saveProjectView(project,words);if(desktop){desktop.postMessage({kind:'save',project:p});return}
-  const blob=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='project.settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);setDirty(false);notify('工程 JSON 已保存')};
- const doExport=()=>{if(dependencyDialogRef.current)return;if(mediaState!=='ready'){notify(`媒体尚未就绪：${mediaName||'未选择媒体'}`,true);return}if(!desktop){notify('请使用 Windows 桌面版导出 MP4',true);return}if(!project||!mediaUrl||!duration||!plan){notify('尚未载入可导出的媒体和字幕，或画布无法排版',true);return}setExporting(true);setExportStatus('正在准备导出…');desktop.postMessage({kind:'export',project:saveProjectView(project,words),duration,videoHeight:mediaHeight,pagePlan:plan})};
- const applyPair=(data:Extract<DesktopMessage,{kind:'pair'}>)=>{
-  try{const input=JSON.parse(data.transcript) as TranscriptStudioInput,parsed=parseTranscriptStudio(input);sourceRef.current=input;
-   const next=createProject(data.mediaName,data.subtitleName,parsed.words);next.style=settingsToStyle(appSettingsRef.current);next.canvas={...appSettingsRef.current.output};next.source.subtitleSha256=data.fingerprint;next.mediaKind=data.mediaKind;
-   let current=next,currentWords=parsed.words;
-   if(data.project){try{const saved:unknown=JSON.parse(data.project);if(!validateProject(saved)||saved.source.subtitleSha256!==data.fingerprint)throw Error('旧工程或字幕指纹不匹配');current=normalizeProjectStyle(saved);currentWords=applyOverrides(parsed,current).words}catch(e){notify(`未恢复工程：${String(e)}`,true)}}
-   setMediaUrl(data.mediaUrl);setMediaName(data.mediaName);setKind(data.mediaKind);setProject(current);setWords(currentWords);setEditing(null);setWordTool(null);setToolLeaving(false);setDirty(false);setDuration(0);setVideoRatio(null);setMediaState('loading');setTime(0);setPlaying(false);
-   notify(`已找到媒体：${data.mediaName}（${data.mediaKind==='audio'?'音频':'视频'}模式），正在读取媒体信息；${parsed.words.length} 个单词`);
-  }catch(e){notify(`字幕读取失败：${String(e)}`,true)}
+ const doSave=()=>{if(exporting)return notify('视频导出期间暂不支持保存工程，请在导出完成后保存。',true);
+  if(!project)return notify('尚未打开标准字幕',true);
+  if(projectLoadBlocked)return notify('现有工程未能通过验证，已禁止覆盖。请检查工程文件并重新打开字幕。',true);
+  let currentWords=words;const active=editRef.current;
+  if(active){try{currentWords=updateWord(words,active.id,active.text)}catch(error){notify(`无法保存工程：请先修正正在编辑的单词。${String(error)}`,true);return}if(!commitEditing())return}
+  const p=saveProjectView(project,currentWords),revision=projectEditStateRef.current.currentRevision;
+  if(desktop){desktop.postMessage({kind:'save',project:p,revision});return}
+  const blob=new Blob([JSON.stringify(p,null,2)],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=transcriptStem(project.source.subtitleName)+'.project.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+  updateProjectEditState(acknowledgeProjectSave(projectEditStateRef.current,revision));
+  notify('工程 JSON 已保存')};
+ const doExportText=()=>{
+  if(!project||!words.length)return notify('尚未打开可导出的字幕',true);
+  if(exporting||dependencyDialogRef.current)return;
+  let currentWords=words;
+  const active=editRef.current;
+  if(active){
+   try{currentWords=updateWord(words,active.id,active.text)}
+   catch(error){notify(`无法导出正文：请先修正正在编辑的单词。${String(error)}`,true);return}
+   // Commit the active edit before taking the export snapshot. Use currentWords
+   // rather than React state, which does not update synchronously.
+   if(!commitEditing())return;
+  }
+  const text=exportPlainText(currentWords);
+  if(!text)return notify('右栏没有可导出的正文',true);
+  if(desktop){desktop.postMessage({kind:'export-text',text});return}
+  const name=transcriptStem(project.source.subtitleName)+'.article.txt';
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob),link=document.createElement('a');
+  link.href=url;link.download=name;link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+  notify(`已下载正文文本：${name}`);
  };
- useEffect(()=>{const receive=({data}:MessageEvent<DesktopMessage>)=>{if(data.kind==='settings'){if(validateSettings(data.settings)){loadedSettingsRef.current=true;appSettingsRef.current=data.settings;setAppSettings(data.settings)}}else if(data.kind==='pair')applyPair(data);else if(data.kind==='saved'){setDirty(false);notify(data.message)}else if(data.kind==='dependency-confirm')setDependency({mode:'confirm',...data});else if(data.kind==='dependency-progress')setDependency({mode:'progress',title:data.title,message:data.message});else if(data.kind==='dependency-cancelling'){const d=dependencyDialogRef.current;if(d?.mode==='progress')setDependency({mode:'cancelling',title:d.title,message:'正在停止安装任务并清理临时文件……'})}else if(data.kind==='dependency-end')setDependency(null);else if(data.kind==='dependency-failed')setDependency({mode:'error',message:data.message});else if(data.kind==='status'){setExporting(data.busy);setExportStatus(data.busy?data.message:'');if(!data.busy){if(!data.error&&dependencyDialogRef.current?.mode==='progress')setDependency(null);if(!dependencyDialogRef.current||dependencyDialogRef.current.mode!=='error')notify(data.message,!!data.error)}}};desktop?.addEventListener('message',receive);return()=>desktop?.removeEventListener('message',receive)},[]);
+ const doExport=()=>{
+  if(dependencyDialogRef.current)return;
+  if(mediaState!=='ready'){notify(`媒体尚未就绪：${mediaName||'未选择媒体'}`,true);return}
+  if(!desktop){notify('请使用 Windows 桌面版导出 MP4',true);return}
+  if(projectLoadBlocked){notify('现有工程未能通过验证，已禁止导出。请检查工程文件并重新打开字幕。',true);return}
+  if(!project||!mediaUrl||!duration||!plan){notify('尚未载入可导出的媒体和字幕，或画布无法排版',true);return}
+  let exportWords=words;
+  const active=editRef.current;
+  if(active){
+   try{exportWords=updateWord(words,active.id,active.text)}
+   catch(error){notify(`无法导出视频：请先修正正在编辑的单词。${String(error)}`,true);return}
+   if(!commitEditing())return;
+  }
+  let exportPlan;
+  try{exportPlan=paginate(exportWords,style,canvasWidth,canvasHeight-mediaHeight,measureWithCanvas(style.fontFamily,style.fontSize,style.fontWeight))}
+  catch(error){notify(`无法生成视频分页：${String(error)}`,true);return}
+  if(!exportPlan.pages.length){notify('没有可导出的视频正文页面。',true);return}
+  setExporting(true);setExportTaskNotice('正在准备导出…');
+  desktop.postMessage({kind:'export',project:saveProjectView(project,exportWords),duration,videoHeight:mediaHeight,pagePlan:exportPlan});
+ };
+ const applyPair=(data:Extract<DesktopMessage,{kind:'pair'}>)=>{
+  try{const input=JSON.parse(data.transcript),parsed=parseTranscriptStudio(input);
+   const next=createProject(data.mediaName,data.subtitleName,parsed.words);next.style=settingsToStyle(appSettingsRef.current);next.canvas={...appSettingsRef.current.output};next.source.subtitleSha256=data.fingerprint;next.mediaKind=data.mediaKind;
+   let current=next,currentWords=parsed.words,blocked=false;
+   if(data.project!==null){try{
+    const saved:unknown=JSON.parse(data.project);
+    if(!validateProject(saved,parsed.words)||saved.source.subtitleSha256!==data.fingerprint||
+      saved.source.videoName.toLowerCase()!==data.mediaName.toLowerCase()||
+      saved.source.subtitleName.toLowerCase()!==data.subtitleName.toLowerCase()||
+      (saved.mediaKind!==undefined&&saved.mediaKind!==data.mediaKind))
+      throw Error('工程格式、来源或字幕指纹不匹配');
+    current=normalizeProjectStyle(saved);currentWords=applyOverrides(parsed,current).words;
+    desktop?.postMessage({kind:'project-validated',fingerprint:data.fingerprint,subtitleName:data.subtitleName});
+   }catch(e){blocked=true;notify(`工程读取失败，已禁止覆盖原工程文件：${String(e)}`,true)}}
+   setProjectLoadBlocked(blocked);
+   setMediaUrl(data.mediaUrl);setMediaName(data.mediaName);setKind(data.mediaKind);setProject(current);setWords(currentWords);setEditing(null);setWordTool(null);setToolLeaving(false);resetProjectDirtyState();setDuration(0);setVideoRatio(null);setMediaState('loading');setTime(0);setPlaying(false);
+   notify(`已找到媒体：${data.mediaName}（${data.mediaKind==='audio'?'音频':'视频'}模式），正在读取媒体信息；${parsed.words.length} 个单词`);
+  }catch(e){
+   // The host has already selected this pair's media URL. Never leave the previous
+   // pair visible if the new transcript fails validation.
+   setMediaUrl('');setMediaName('');setKind('video');setProject(null);setWords([]);
+   setEditing(null);setWordTool(null);setToolLeaving(false);resetProjectDirtyState();setDuration(0);setVideoRatio(null);
+   setMediaState('error');setTime(0);setPlaying(false);setProjectLoadBlocked(false);
+   notify(`字幕读取失败：${String(e)}`,true);
+  }
+ };
+ useEffect(()=>{const receive=({data}:MessageEvent<DesktopMessage>)=>{if(data.kind==='settings'){if(validateSettings(data.settings)){loadedSettingsRef.current=true;appSettingsRef.current=data.settings;setAppSettings(data.settings)}}else if(data.kind==='pair')applyPair(data);else if(data.kind==='saved'){
+   const nextState=acknowledgeProjectSave(projectEditStateRef.current,data.revision);
+   updateProjectEditState(nextState);
+   notify(hasUnsavedProjectChanges(nextState)?`${data.message}；当前工程仍有未保存修改`:data.message);
+  }else if(data.kind==='text-exported')notify(data.message);else if(data.kind==='text-export-error')notify(data.message,true);else if(data.kind==='dependency-confirm')setDependency({mode:'confirm',...data});else if(data.kind==='dependency-progress')setDependency({mode:'progress',title:data.title,message:data.message});else if(data.kind==='dependency-cancelling'){const d=dependencyDialogRef.current;if(d?.mode==='progress')setDependency({mode:'cancelling',title:d.title,message:'正在停止安装任务并清理临时文件……'})}else if(data.kind==='dependency-end')setDependency(null);else if(data.kind==='export-cancelling')setExportTaskNotice('正在取消导出，等待渲染进程退出并清理缓存…',false);else if(data.kind==='dependency-failed')setDependency({mode:'error',message:data.message});else if(data.kind==='status'){setExporting(data.busy);if(data.busy){if(data.error)notify(data.message,true);else setExportTaskNotice(data.message,data.canCancel!==false)}else{clearExportTaskNotice();if(!data.error&&dependencyDialogRef.current?.mode==='progress')setDependency(null);if(!dependencyDialogRef.current||dependencyDialogRef.current.mode!=='error')notify(data.message,!!data.error)}}};desktop?.addEventListener('message',receive);return()=>desktop?.removeEventListener('message',receive)},[]);
  useEffect(()=>{desktop?.postMessage({kind:'ready'})},[]);
  async function openBrowserJson(file:File){
   try{const input=JSON.parse(await file.text());const parsed=parseTranscriptStudio(input);const stem=transcriptStem(file.name);
@@ -166,9 +273,23 @@ function App(){
    const match=selectCompanion(file.name,names);if(!match)throw Error(missingCompanionMessage(stem));
    const handle=await directory.getFileHandle(match.name),media=await handle.getFile(),url=URL.createObjectURL(media);
    const next=createProject(match.name,file.name,parsed.words);next.style=settingsToStyle(appSettingsRef.current);next.canvas={...appSettingsRef.current.output};next.mediaKind=match.kind;
-   setMediaUrl(old=>{if(old.startsWith('blob:'))URL.revokeObjectURL(old);return url});setMediaName(match.name);setKind(match.kind);setProject(next);setWords(parsed.words);setEditing(null);setWordTool(null);setDirty(false);setVideoRatio(null);setMediaState('loading');setDuration(0);sourceRef.current=input;notify(`已找到媒体：${match.name}（${match.kind==='audio'?'音频':'视频'}模式），正在读取媒体信息`);
+   setProjectLoadBlocked(false);
+   setMediaUrl(old=>{if(old.startsWith('blob:'))URL.revokeObjectURL(old);return url});setMediaName(match.name);setKind(match.kind);setProject(next);setWords(parsed.words);setEditing(null);setWordTool(null);resetProjectDirtyState();setVideoRatio(null);setMediaState('loading');setDuration(0);notify(`已找到媒体：${match.name}（${match.kind==='audio'?'音频':'视频'}模式），正在读取媒体信息`);
   }catch(e){notify(`导入失败：${String(e)}`,true)}
  }
+ const openSubtitleFile=(file:File)=>{
+  if(desktop)desktop.postMessageWithAdditionalObjects({kind:'open'},[file]);
+  else void openBrowserJson(file);
+ };
+ const requestOpenSubtitle=(file:File)=>{
+  if(hasUnsavedChanges()){setPendingImportFile(file);return}
+  openSubtitleFile(file);
+ };
+ const resolvePendingImport=(accepted:boolean)=>{
+  const file=pendingImportFile;
+  setPendingImportFile(null);
+  if(accepted&&file)openSubtitleFile(file);
+ };
  const onMediaReady=(element:HTMLMediaElement)=>{
   if(!Number.isFinite(element.duration)||element.duration<=0){setMediaState('error');notify(`无法读取媒体时长：${mediaName}`,true);return}
   if(kind==='video'){
@@ -185,9 +306,12 @@ function App(){
   setMediaState('error');setPlaying(false);
   notify(`无法播放媒体：${mediaName||'未知文件'}。${describeMediaError(element.error?.code)}。请核对文件名与内部编码。`,true);
  };
- const refresh=(newWords:Word[])=>{setWords(newWords);setDirty(true)};
+ const refresh=(newWords:Word[])=>{setWords(newWords);markDirty()};
  const snapshot=(w:Word,text=w.display):WordToolSnapshot=>({id:w.id,text,start:w.start,end:w.end,breakParagraph:w.breakParagraph});
- const setEditing=(next:{id:string;text:string}|null)=>{editRef.current=next;setEdit(next)};
+ const setEditing=(next:{id:string;text:string}|null)=>{
+  editRef.current=next;setEdit(next);
+  updateProjectEditState(setProjectDraftChanged(projectEditStateRef.current,hasUnsavedWordDraft(wordsRef.current,next)));
+ };
  const commitEditing=():boolean=>{
   const current=editRef.current;if(!current)return true;
   const w=words.find(x=>x.id===current.id);
@@ -225,7 +349,7 @@ function App(){
   };
   document.addEventListener('dblclick',onOutsideDoubleClick);
   return()=>document.removeEventListener('dblclick',onOutsideDoubleClick);
- });
+ },[words]);
  const toggleParagraph=()=>{
   const current=editRef.current;if(!current)return;
   const w=words.find(x=>x.id===current.id);if(!w)return;
@@ -241,7 +365,7 @@ function App(){
   const layoutChanged=JSON.stringify({...next,rightFont:undefined})!==JSON.stringify({...displayedSettings,rightFont:undefined});
   const globalNext=layoutChanged?next:{...appSettings,rightFont:next.rightFont};
   appSettingsRef.current=globalNext;setAppSettings(globalNext);
-  if(project&&layoutChanged){mediaRef.current?.pause();setProject(p=>p?{...p,canvas:{...next.output},style:settingsToStyle(next)}:p);setDirty(true)}
+  if(project&&layoutChanged){mediaRef.current?.pause();setProject(p=>p?{...p,canvas:{...next.output},style:settingsToStyle(next)}:p);markDirty()}
   if(desktop&&loadedSettingsRef.current)desktop.postMessage({kind:'settings-save',settings:globalNext});
  };
  shortcutRef.current=(e:KeyboardEvent)=>{if(e.defaultPrevented||e.altKey||e.metaKey||settingsOpen||dependencyDialogRef.current)return;const target=e.target;if(target instanceof HTMLElement&&(target.isContentEditable||['INPUT','TEXTAREA','SELECT','BUTTON'].includes(target.tagName)))return;
@@ -253,8 +377,18 @@ function App(){
 
  const timeLabel=(x:number)=>`${Math.floor(x/60).toString().padStart(2,'0')}:${Math.floor(x%60).toString().padStart(2,'0')}`;
  const iconButton=(name:Parameters<typeof Icon>[0]['name'],title:string,click:()=>void,disabled=false)=><button className="circle-button" title={title} aria-label={title} disabled={disabled} onClick={click}><Icon name={name}/></button>;
+ const dependencyTitle=dependencyDialog?.mode==='error'?'视频导出环境准备失败':dependencyDialog?.mode==='cancelling'?'正在取消安装':dependencyDialog?.title??'';
+ const dependencyActions:DialogAction[]=!dependencyDialog?[]:dependencyDialog.mode==='confirm'
+  ?[{label:'取消',variant:'primary',autoFocus:true,onClick:()=>replyDependency(false)},
+    {label:dependencyDialog.action,variant:'secondary',onClick:()=>replyDependency(true)}]
+  :dependencyDialog.mode==='progress'
+   ?[{label:'取消安装',variant:'secondary',autoFocus:true,onClick:cancelDependencyInstall}]
+   :dependencyDialog.mode==='cancelling'
+    ?[{label:'正在取消…',variant:'secondary',disabled:true,onClick:()=>{}}]
+    :[{label:'关闭',variant:'primary',autoFocus:true,onClick:()=>setDependency(null)},
+      {label:'重试',variant:'secondary',onClick:()=>{setDependency(null);setTimeout(()=>doExport(),0)}}];
  return <div className="app">
-  <input className="hidden-file-input" type="file" accept=".transcript-studio.json" ref={inputRef} onChange={e=>{const f=e.currentTarget.files?.[0];e.currentTarget.value='';if(!f)return;if(dirty&&!window.confirm('未保存的编辑将丢失，确定打开其他字幕？'))return;if(desktop)desktop.postMessageWithAdditionalObjects({kind:'open'},[f]);else void openBrowserJson(f)}}/>
+  <input className="hidden-file-input" type="file" accept=".transcript-studio.json" ref={inputRef} onChange={e=>{const f=e.currentTarget.files?.[0];e.currentTarget.value='';if(f)requestOpenSubtitle(f)}}/>
   <main className="workspace" style={{gridTemplateColumns:`${geometry.frameWidth}px minmax(240px,1fr)`}}>
    <section className="preview" aria-label="阅读画布预览" style={{width:geometry.frameWidth,height:geometry.frameHeight}}>
     <div className="preview-stage" style={{width:geometry.previewWidth,height:geometry.previewHeight}}>
@@ -267,45 +401,44 @@ function App(){
     <span className="transport-time">{timeLabel(time)} / {timeLabel(duration)}</span>
     <div className="transport-row"><input aria-label="进度" type="range" min={0} max={duration||1} step="0.01" value={time} onChange={e=>seek(Number(e.target.value))}/>{iconButton(playing?'pause':'play',playing?'暂停 Space':'播放 Space',toggle)}{iconButton('stop','停止 X',stop)}</div>
    </div></section>
-   <aside><div className="toolbar"><span className="app-label">Transcript Studio {dirty?'●':''}</span>{iconButton('settings','设置',openSettings)}{iconButton('save','保存工程 Ctrl+S',doSave,!project||exporting)}{iconButton('import',mediaName?`导入 JSON Ctrl+O · 当前媒体：${mediaName}`:'导入 JSON Ctrl+O',openPicker,exporting)}{iconButton('export','导出 MP4',doExport,!project||exporting)}</div>
-    <div className="panel">{exportStatus&&<div className="export-status" role="status">{exportStatus}</div>}<div ref={transcriptRef} className="transcript" style={{fontFamily:appSettings.rightFont.family,fontSize:editorFontSize,fontWeight:400,lineHeight:1.5,color:appSettings.rightFont.color,backgroundColor:appSettings.rightFont.backgroundColor}}>
+   <aside><div className="toolbar"><span className="app-label">Transcript Studio {hasUnsavedProjectChanges(projectEditState)?'●':''}</span>{iconButton('settings','设置',openSettings)}{iconButton('import',mediaName?`导入 JSON Ctrl+O · 当前媒体：${mediaName}`:'导入 JSON Ctrl+O',openPicker,exporting)}{iconButton('save','保存工程 Ctrl+S',doSave,!project||exporting||projectLoadBlocked)}{iconButton('text-export','导出正文 TXT',doExportText,!project||exporting)}{iconButton('export','导出 MP4',doExport,!project||exporting||projectLoadBlocked)}</div>
+    <div className="panel"><div ref={transcriptRef} className="transcript" style={{fontFamily:appSettings.rightFont.family,fontSize:editorFontSize,fontWeight:400,lineHeight:1.5,color:appSettings.rightFont.color,backgroundColor:appSettings.rightFont.backgroundColor}}>
      {words.map(w=><React.Fragment key={w.id}>{w.hidden?null:edit?.id===w.id?<InlineWordEditor key={w.id} text={edit.text} fontFamily={appSettings.rightFont.family} fontSize={editorFontSize} color={appSettings.rightFont.color} availableWidth={editorAvailableWidth}
        onText={text=>setEditing({id:w.id,text})} onCommit={commitEditing} onCancel={cancelEditing}/>
        :<span className="transcript-word" title={`${w.start.toFixed(3)}–${w.end.toFixed(3)}`} onDoubleClick={e=>{e.stopPropagation();startEditing(w)}}>{w.display}</span>}{' '}{w.breakParagraph?<div className="paragraph-break"/>:null}</React.Fragment>)}
     </div></div>
-    {wordTool&&<div className={`word-tools ${toolLeaving?'word-tools-leaving':''}`} role="group" aria-label="单词编辑工具栏"
-     onMouseDown={e=>{if(editRef.current)e.preventDefault()}}>
-      <div className="word-tools-title">{edit?.id===wordTool.id?edit.text:wordTool.text}: {wordTool.start.toFixed(3)}–{wordTool.end.toFixed(3)}</div>
-      <div className="word-tools-actions"><button type="button" disabled={!edit} onClick={()=>{
-       const current=editRef.current;const w=words.find(x=>x.id===current?.id);if(w){seek(w.start);mediaRef.current?.pause()}
-      }}>定位</button><button type="button" disabled={!edit||words.filter(x=>!x.hidden).at(-1)?.id===wordTool.id} onClick={toggleParagraph}>
-       {paragraphActionLabel(wordTool.breakParagraph)}
-      </button></div>
-    </div>}
-    <div className="notices" role="status">{notices.filter(n=>n.error || notices.slice(-3).includes(n)).map(n=><div key={n.id} className={`notice ${n.error?'error':''}`} role={n.error?'alert':'status'}><span>{n.text}</span><button aria-label="关闭消息" title="关闭" onClick={()=>setNotices(a=>a.filter(x=>x.id!==n.id))}><Icon name="close"/></button></div>)}</div>
+    <div className="aside-floats">
+     <div className="notices" role="status">{notices.filter(n=>n.error||n.task||notices.slice(-3).includes(n)).map(n=><div key={n.id} className={`notice ${n.error?'error':''} ${n.task?'notice-task':''}`} role={n.error?'alert':'status'}><span className="notice-content">{n.task&&<span className="notice-spinner" aria-hidden="true"/>}{n.text}</span>{!n.task?<button aria-label="关闭消息" title="关闭" onClick={()=>setNotices(a=>a.filter(x=>x.id!==n.id))}><Icon name="close"/></button>:<button type="button" className="notice-cancel-export" onClick={cancelExport} disabled={n.cancelable===false} title={n.cancelable===false?'当前阶段无法取消':'取消导出'}>取消</button>}</div>)}</div>
+     {wordTool&&<div className={`word-tools ${toolLeaving?'word-tools-leaving':''}`} role="group" aria-label="单词编辑工具栏"
+      onMouseDown={e=>{if(editRef.current)e.preventDefault()}}>
+       <div className="word-tools-title">{edit?.id===wordTool.id?edit.text:wordTool.text}: {wordTool.start.toFixed(3)}–{wordTool.end.toFixed(3)}</div>
+       <div className="word-tools-actions"><button type="button" disabled={!edit} onClick={()=>{
+        const current=editRef.current;const w=words.find(x=>x.id===current?.id);if(w){seek(w.start);mediaRef.current?.pause()}
+       }}>定位</button><button type="button" disabled={!edit||words.filter(x=>!x.hidden).at(-1)?.id===wordTool.id} onClick={toggleParagraph}>
+        {paragraphActionLabel(wordTool.breakParagraph)}
+       </button></div>
+     </div>}
+    </div>
    </aside>
   </main>
-  {dependencyDialog&&<div className="modal-backdrop dependency-backdrop" role="presentation">
-    <div className="dependency-dialog" role="dialog" aria-modal="true" aria-labelledby="dependency-dialog-title" aria-describedby="dependency-dialog-description"
-      onKeyDown={e=>{if(e.key==='Escape'){if(dependencyDialog.mode==='confirm'){e.preventDefault();replyDependency(false)}else if(dependencyDialog.mode==='progress'){e.preventDefault();cancelDependencyInstall()}} if(e.key==='Tab'){const buttons=[...e.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];if(!buttons.length){e.preventDefault();return}const active=document.activeElement;const index=buttons.indexOf(active as HTMLButtonElement);if(e.shiftKey&&index<=0){e.preventDefault();buttons.at(-1)?.focus()}else if(!e.shiftKey&&index===buttons.length-1){e.preventDefault();buttons[0]?.focus()}}}}>
-      <div className="dependency-dialog-head">
-        <div className="dependency-dialog-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8 12 4l8 4-8 4-8-4Z"/><path d="M4 8v9l8 4 8-4V8M12 12v9"/></svg></div>
-        <div className="dependency-dialog-titles"><strong id="dependency-dialog-title">{dependencyDialog.mode==='error'?'视频导出环境准备失败':dependencyDialog.mode==='cancelling'?'正在取消安装':dependencyDialog.title}</strong><span>Transcript Studio · 环境准备</span></div>
-        {dependencyDialog.mode==='confirm'&&<button type="button" className="dependency-close" aria-label="关闭" onClick={()=>replyDependency(false)}><Icon name="close"/></button>}
-      </div>
-      <div className="dependency-dialog-body" id="dependency-dialog-description">
-        {dependencyDialog.mode==='confirm'?<><strong className="dependency-heading">{dependencyDialog.heading}</strong><p>{dependencyDialog.details}</p><div className="dependency-tip"><span aria-hidden="true">ⓘ</span><span>仅在你确认后开始准备应用自身的导出资源；不会安装系统级 Node.js 或 .NET。</span></div></>:
-         (dependencyDialog.mode==='progress'||dependencyDialog.mode==='cancelling')?<><strong className="dependency-heading">{dependencyDialog.mode==='cancelling'?'正在取消安装':'正在准备运行环境'}</strong><p aria-live="polite">{dependencyDialog.message}</p><div className="dependency-progress-track" role="progressbar" aria-label={dependencyDialog.mode==='cancelling'?'正在取消':'安装进行中'}><span/></div><p className="dependency-fine-print">{dependencyDialog.mode==='cancelling'?'正在终止程序启动的安装进程，完成后会自动关闭此窗口。':'此步骤无法可靠计算百分比，完成后会自动继续导出。'}</p></>:
-         <><strong className="dependency-heading">安装或准备操作未成功</strong><p className="dependency-error-text">{dependencyDialog.message}</p><div className="dependency-tip"><span aria-hidden="true">ⓘ</span><span>可以检查网络、npm 安装状态后重试。已完成的字幕编辑不会丢失。</span></div></>}
-      </div>
-      <div className="dependency-dialog-actions">
-       {dependencyDialog.mode==='confirm'?<><button type="button" className="dependency-btn dependency-secondary" onClick={()=>replyDependency(false)}>取消</button><button ref={dependencyDefaultButton} type="button" className="dependency-btn dependency-primary" autoFocus onClick={()=>replyDependency(true)}>{dependencyDialog.action}</button></>:
-        dependencyDialog.mode==='progress'?<button type="button" className="dependency-btn dependency-secondary" autoFocus onClick={cancelDependencyInstall}>取消安装</button>:
-        dependencyDialog.mode==='cancelling'?<button type="button" className="dependency-btn dependency-secondary" disabled>正在取消…</button>:
-       <><button type="button" className="dependency-btn dependency-secondary" onClick={()=>setDependency(null)}>关闭</button><button type="button" className="dependency-btn dependency-primary" onClick={()=>{setDependency(null);setTimeout(()=>doExport(),0)}}>重试</button></>}
-      </div>
-    </div>
-   </div>}
+  {pendingImportFile&&<Dialog title="打开其他字幕" subtitle="字幕工程" icon="warning"
+   onClose={()=>resolvePendingImport(false)} onEscape={()=>resolvePendingImport(false)} dismissOnBackdrop
+   actions={[
+    {label:'取消',variant:'primary',autoFocus:true,onClick:()=>resolvePendingImport(false)},
+    {label:'放弃修改并打开',variant:'danger',onClick:()=>resolvePendingImport(true)}
+   ]}>
+   <p>当前字幕存在尚未保存的修改。继续打开其他字幕将丢失这些修改，是否继续？</p>
+  </Dialog>}
+  {dependencyDialog&&<Dialog title={dependencyTitle} subtitle="视频导出环境准备"
+   icon={dependencyDialog.mode==='error'?'error':'package'}
+   onClose={dependencyDialog.mode==='confirm'?()=>replyDependency(false):dependencyDialog.mode==='error'?()=>setDependency(null):undefined}
+   onEscape={dependencyDialog.mode==='confirm'?()=>replyDependency(false):dependencyDialog.mode==='progress'?cancelDependencyInstall:dependencyDialog.mode==='error'?()=>setDependency(null):undefined}
+   actions={dependencyActions} className="dependency-dialog"
+   showCloseButton={dependencyDialog.mode==='confirm'||dependencyDialog.mode==='error'}>
+   {dependencyDialog.mode==='confirm'?<><strong className="dependency-heading">{dependencyDialog.heading}</strong><p>{dependencyDialog.details}</p><div className="dependency-tip"><span aria-hidden="true">ⓘ</span><span>仅在你确认后开始准备应用自身的导出资源；不会安装系统级 Node.js 或 .NET。</span></div></>:
+    (dependencyDialog.mode==='progress'||dependencyDialog.mode==='cancelling')?<><strong className="dependency-heading">{dependencyDialog.mode==='cancelling'?'正在取消安装':'正在准备运行环境'}</strong><p aria-live="polite">{dependencyDialog.message}</p><div className="dependency-progress-track" role="progressbar" aria-label={dependencyDialog.mode==='cancelling'?'正在取消':'安装进行中'}><span/></div><p className="dependency-fine-print">{dependencyDialog.mode==='cancelling'?'正在终止程序启动的安装进程，完成后会自动关闭此窗口。':'此步骤无法可靠计算百分比，完成后会自动继续导出。'}</p></>:
+    <><strong className="dependency-heading">安装或准备操作未成功</strong><p className="dependency-error-text">{dependencyDialog.message}</p><div className="dependency-tip"><span aria-hidden="true">ⓘ</span><span>可以检查网络、npm 安装状态后重试。已完成的字幕编辑不会丢失。</span></div></>}
+  </Dialog>}
   {settingsOpen&&<div className="modal-backdrop settings-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)closeSettings()}}>
    <div className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置"
     style={{left:settingsRect.x,top:settingsRect.y,width:settingsRect.width,height:settingsRect.height}}>

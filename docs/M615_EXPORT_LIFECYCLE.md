@@ -21,7 +21,7 @@ During `Committing`, cancellation is deferred: file replacement is allowed to fi
 
 ## Cache cleanup
 
-At the start of an export, only `job-*` directories and `*.tmp` files older than seven days under this project's cache are considered for cleanup. Both per-entry deletion failures and directory-enumeration failures are best-effort and do not prevent export. Active task directories are newly created and are never selected by the age cutoff.
+At the start of an export, only `job-*` directories and `*.tmp` files older than seven days under this project's cache are considered for cleanup. `cache/render` and `cache/temp` are checked independently: a missing render folder does not skip stale temporary files. Both per-entry deletion failures and directory-enumeration failures are best-effort and do not prevent export. Active task directories are newly created and are never selected by the age cutoff.
 
 ## UI
 
@@ -46,3 +46,10 @@ No external `ffprobe.exe` is required by the desktop host. It checks the MP4 top
 ## M6.15.3 progress notice behavior
 
 The host includes `canCancel: false` in status messages during the final file-commit phase. The React notice disables its cancel button in that phase; clicking Cancel after the host has entered `Committing` is not presented as an available operation. The notice uses a dedicated button class so the global 22px close-button rule cannot force its label to wrap.
+
+
+## CLI cache isolation (M6.15.7)
+
+The independent `npm run export` command treats `--cache-dir` as a **cache root**, not as a single shared workspace. Each CLI process creates its own `job-*` directory under that root for copied media, browser bundle and `render-output.mp4`. Without `--cache-dir`, the root is `.transcript-studio-cache/` beside the absolute output file. These CLI job directories are **not automatically deleted** so failed runs remain diagnosable; users may remove old jobs when no CLI render is active. This differs from the WPF desktop host, which owns and deletes its outer task cache after success/cancellation.
+
+The WPF `--cache-dir` argument points to its already isolated `cache/render/job-<guid>` directory. The CLI creates a nested job directory inside it; the desktop cleanup removes the outer directory and all its children. This does not affect the final `<stem>.exported.mp4` location.

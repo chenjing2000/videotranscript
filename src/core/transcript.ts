@@ -52,6 +52,7 @@ export function parseTranscriptStudio(input:unknown):Transcript {
 }
 export function updateWord(words:Word[],id:string,display:string):Word[]{
  const v=display.trim();if(!v||/\s/u.test(v))throw new Error('每个时间锚点只能编辑一个词，不能输入空格或空词');
+ if(words.some(w=>w.id===id&&w.display===v))return words;
  return words.map(w=>w.id===id?{...w,display:v}:w);
 }
 export function applyOverrides(t:Transcript,p:Project):Transcript{

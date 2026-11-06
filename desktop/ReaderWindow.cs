@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
@@ -41,11 +41,16 @@ internal sealed class ReaderWindow : Window
     private long pendingDependencyDecisionId;
     // Active only during application-owned dependency preparation; never cancel arbitrary Node processes.
     private CancellationTokenSource? dependencyInstallCancellation;
-    private readonly string settingsFile = Path.Combine(AppContext.BaseDirectory, "voicetranscript.settings.json");
+    private const string SettingsFileName = "transcriptstudio.settings.json";
+    private const string SettingsFormat = "transcriptstudio-settings";
+    private const string LegacySettingsFileName = "voicetranscript.settings.json";
+    private const string LegacySettingsFormat = "voicetranscript-settings";
+    private readonly string settingsFile = Path.Combine(AppContext.BaseDirectory, SettingsFileName);
+    private readonly string legacySettingsFile = Path.Combine(AppContext.BaseDirectory, LegacySettingsFileName);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly object DefaultSettings = new
     {
-        format = "voicetranscript-settings", schemaVersion = 1,
+        format = SettingsFormat, schemaVersion = 1,
         leftFont = new { family = "Arial", size = 40, color = "#293847", highlightColor = "#B81A35" },
         rightFont = new { family = "Arial", size = 16, color = "#293847", backgroundColor = "#F7F4EC" },
         paragraph = new { firstLineIndentEm = 2, lineHeight = 1.4, gap = 20, alignment = "justify" },
@@ -160,7 +165,7 @@ internal sealed class ReaderWindow : Window
 
         try
         {
-            AppLog.Write("Window", $"Restoring main window from tray. Visible={IsVisible}; State={WindowState}; Active={IsActive}.");
+            AppLog.Write("Window", $"Activating main window. Visible={IsVisible}; State={WindowState}; Active={IsActive}.");
             ShowInTaskbar = true;
 
             if (WindowState != WindowState.Normal)
@@ -424,14 +429,76 @@ internal sealed class ReaderWindow : Window
                 }
             }
             catch (JsonException) { /* preserve invalid file for inspection */ }
-            var backup = settingsFile + ".invalid-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
-            File.Move(settingsFile, backup);
+
+            var backup = BackupInvalidSettingsFile(settingsFile);
             FluentDialog.ShowMessage(this, "配置已重置", $"配置格式无效，已备份至：{backup}。将重新生成默认设置。", icon: FluentDialogIcon.Warning);
+            return CreateDefaultSettings();
         }
+
+        if (!File.Exists(settingsFile) && File.Exists(legacySettingsFile))
+        {
+            if (TryMigrateLegacySettings(out var migrated))
+                return migrated;
+
+            var backup = BackupInvalidSettingsFile(legacySettingsFile);
+            FluentDialog.ShowMessage(this, "旧配置无法迁移", $"旧版全局设置格式无效，已备份至：{backup}。将重新生成默认设置。", icon: FluentDialogIcon.Warning);
+        }
+
+        return CreateDefaultSettings();
+    }
+
+    private bool TryMigrateLegacySettings(out string migrated)
+    {
+        migrated = string.Empty;
+        var content = File.ReadAllText(legacySettingsFile);
+
+        try
+        {
+            if (JsonNode.Parse(content) is not JsonObject candidate ||
+                candidate["format"]?.GetValue<string>() != LegacySettingsFormat ||
+                candidate["schemaVersion"]?.GetValue<int>() != 1 ||
+                JsonNode.Parse(JsonSerializer.Serialize(DefaultSettings)) is not JsonObject fallback)
+                return false;
+
+            // Preserve all valid user values, fill only fields absent from the old file,
+            // and change only the application-owned format marker.
+            FillMissing(candidate, fallback);
+            candidate["format"] = SettingsFormat;
+            migrated = candidate.ToJsonString(JsonOptions);
+
+            using var migratedDoc = JsonDocument.Parse(migrated);
+            if (!ValidSettings(migratedDoc.RootElement))
+            {
+                migrated = string.Empty;
+                return false;
+            }
+
+            AtomicWrite(settingsFile, migrated);
+            AppLog.Write("Settings", $"Migrated global settings to '{settingsFile}'. The legacy file '{legacySettingsFile}' was retained.");
+            return true;
+        }
+        catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException)
+        {
+            AppLog.WriteException("Settings.MigrateLegacy", error);
+            migrated = string.Empty;
+            return false;
+        }
+    }
+
+    private static string BackupInvalidSettingsFile(string file)
+    {
+        var backup = file + ".invalid-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
+        File.Move(file, backup);
+        return backup;
+    }
+
+    private string CreateDefaultSettings()
+    {
         var defaults = JsonSerializer.Serialize(DefaultSettings, JsonOptions);
         AtomicWrite(settingsFile, defaults);
         return defaults;
     }
+
     private static void FillMissing(JsonObject target, JsonObject defaults)
     {
         foreach(var entry in defaults)
@@ -445,7 +512,7 @@ internal sealed class ReaderWindow : Window
     {
         try
         {
-            if (root.GetProperty("format").GetString() != "voicetranscript-settings" || root.GetProperty("schemaVersion").GetInt32() != 1) return false;
+            if (root.GetProperty("format").GetString() != SettingsFormat || root.GetProperty("schemaVersion").GetInt32() != 1) return false;
             var lf = root.GetProperty("leftFont"); var rf = root.GetProperty("rightFont");
             static bool Color(string? s) => s is not null && System.Text.RegularExpressions.Regex.IsMatch(s, "^#[a-fA-F0-9]{6}$");
             static bool Font(JsonElement e) => new[] { "Arial", "Nunito Sans", "Segoe UI" }.Contains(e.GetString());
@@ -749,6 +816,7 @@ internal sealed class ReaderWindow : Window
             if (!shouldExit)
             {
                 AppLog.Write("Window", "Close cancelled; export continues.");
+                RestoreAfterCancelledClose(wasVisible);
                 return;
             }
 
@@ -761,6 +829,7 @@ internal sealed class ReaderWindow : Window
                 if (!discardChanges)
                 {
                     AppLog.Write("Window", "Close cancelled; unsaved project changes are retained and export continues.");
+                    RestoreAfterCancelledClose(wasVisible);
                     return;
                 }
             }
@@ -783,6 +852,7 @@ internal sealed class ReaderWindow : Window
         if (hasUnsavedChanges)
         {
             args.Cancel = true;
+            var wasVisible = IsVisible;
             bool discardChanges;
             isCloseConfirmationOpen = true;
             try { discardChanges = ConfirmDiscardUnsavedChanges(); }
@@ -790,6 +860,7 @@ internal sealed class ReaderWindow : Window
             if (!discardChanges)
             {
                 AppLog.Write("Window", "Close cancelled; unsaved project changes are retained.");
+                RestoreAfterCancelledClose(wasVisible);
                 return;
             }
 
@@ -802,6 +873,29 @@ internal sealed class ReaderWindow : Window
         isShuttingDown = true;
         AppLog.Write("Window", "Shutdown accepted; no export task or unsaved project changes are active.");
         pendingDependencyDecision?.TrySetResult(false);
+    }
+
+    private void RestoreAfterCancelledClose(bool wasVisible)
+    {
+        if (!wasVisible || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+            return;
+
+        try
+        {
+            // Wait until the modal dialog and the current Closing event have both unwound.
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                if (isShuttingDown || !IsVisible)
+                    return;
+
+                AppLog.Write("Window", "Close was cancelled; restoring the previously visible main window.");
+                ActivateFromTray();
+            }));
+        }
+        catch (InvalidOperationException error)
+        {
+            AppLog.WriteException("Window.RestoreAfterCancelledClose", error);
+        }
     }
 
     private bool ConfirmDiscardUnsavedChanges()
@@ -1089,37 +1183,41 @@ internal sealed class ReaderWindow : Window
     private static void CleanupStaleProjectCache(string cacheRoot, TimeSpan maxAge)
     {
         var renderRoot = Path.Combine(cacheRoot, "render");
-        if (!Directory.Exists(renderRoot)) return;
         var cutoff = DateTime.UtcNow - maxAge;
-        try
+        if (Directory.Exists(renderRoot))
         {
-            foreach (var directory in Directory.EnumerateDirectories(renderRoot, "job-*", SearchOption.TopDirectoryOnly))
+            try
             {
-                try
+                foreach (var directory in Directory.EnumerateDirectories(renderRoot, "job-*", SearchOption.TopDirectoryOnly))
                 {
-                    var info = new DirectoryInfo(directory);
-                    if (info.LastWriteTimeUtc < cutoff)
-                        Directory.Delete(directory, recursive: true);
+                    try
+                    {
+                        var info = new DirectoryInfo(directory);
+                        if (info.LastWriteTimeUtc < cutoff)
+                            Directory.Delete(directory, recursive: true);
+                    }
+                    catch { /* A single stale directory must not stop cleanup. */ }
                 }
-                catch { /* A single stale directory must not stop cleanup. */ }
             }
+            catch { /* Enumeration is best-effort; cache cleanup must never prevent export. */ }
         }
-        catch { /* Enumeration is best-effort; cache cleanup must never prevent export. */ }
 
         var tempRoot = Path.Combine(cacheRoot, "temp");
-        if (!Directory.Exists(tempRoot)) return;
-        try
+        if (Directory.Exists(tempRoot))
         {
-            foreach (var file in Directory.EnumerateFiles(tempRoot, "*.tmp", SearchOption.TopDirectoryOnly))
+            try
             {
-                try
+                foreach (var file in Directory.EnumerateFiles(tempRoot, "*.tmp", SearchOption.TopDirectoryOnly))
                 {
-                    if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
+                    }
+                    catch { /* A single stale file must not stop cleanup. */ }
                 }
-                catch { /* A single stale file must not stop cleanup. */ }
             }
+            catch { /* Enumeration is best-effort; cache cleanup must never prevent export. */ }
         }
-        catch { /* Enumeration is best-effort; cache cleanup must never prevent export. */ }
     }
 
     private static void TryDeleteFile(string path)

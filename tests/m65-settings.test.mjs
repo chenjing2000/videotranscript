@@ -26,3 +26,8 @@ test('M6.5: new style uses em indentation rather than ch',()=>{
  const s=settings.settingsToStyle(settings.DEFAULT_SETTINGS);
  assert.equal(s.firstLineIndentEm,2);assert.equal(s.firstLineIndentCh,undefined);
 });
+
+test('M6.15.8: legacy settings format is not accepted as the current format',()=>{
+ const legacy={...settings.DEFAULT_SETTINGS,format:'voicetranscript-settings'};
+ assert.equal(settings.validateSettings(legacy),false);
+});

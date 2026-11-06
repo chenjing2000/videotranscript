@@ -1,4 +1,4 @@
-# Transcript Studio — M6.15.6.2
+# Transcript Studio — M6.15.8
 
 > Current source includes the WPF single-instance/tray lifecycle, project-local export cache, cancellable rendering, validated MP4 commit, revision-based unsaved-state tracking and unified Fluent dialogs with viewport-safe layout. See `M6.15_RELEASE_NOTES.md`, `docs/M615_EXPORT_LIFECYCLE.md`, and `docs/M614_SINGLE_INSTANCE_AND_TRAY.md`.
 
@@ -32,7 +32,7 @@ dotnet publish desktop/TranscriptStudio.csproj -c Release -o dist/wpf
 npm.cmd run export -- --media "video/Lesson.mp3" --json "video/Lesson.transcript-studio.json" --out "video/exports/Lesson.mp4"
 ```
 
-Use `--project path/to/Lesson.project.json` for customized canvas size, editing overrides and typography. `--cache-dir path/to/cache` is optional; when omitted, the CLI creates `.transcript-studio-cache/` beside the output file. The desktop app supplies its own project-local task cache and media metadata. CLI export uses `ffprobe` to inspect media when duration or video dimensions are not supplied. Default canvas is 1200×1600. Output supports any even width/height in the configured range 320–3840.
+Use `--project path/to/Lesson.project.json` for customized canvas size, editing overrides and typography. `--cache-dir path/to/cache` is optional; when omitted, the CLI creates `.transcript-studio-cache/` beside the output file. Every CLI invocation uses its own `job-*` subdirectory under that cache root, including when `--cache-dir` is specified. CLI caches are kept for diagnosis and can be removed manually when no export is running; the desktop app supplies its own project-local task cache and cleans it on normal completion/cancellation. CLI export uses `ffprobe` to inspect media when duration or video dimensions are not supplied. Default canvas is 1200×1600. Output supports any even width/height in the configured range 320–3840.
 
 ## Architecture and review
 
@@ -52,6 +52,6 @@ The left canvas preview keeps the project output aspect ratio and is never less 
 
 ## Framework-dependent deployment
 
-Portable application preferences: `voicetranscript.settings.json` next to `TranscriptStudio.exe` (created on first launch). For `Lesson.transcript-studio.json`, the current work directory is `Lesson/`, containing `Lesson.project.json`, `Lesson.exported.mp4` (after MP4 export), `Lesson.article.txt` (after text export), and a `cache/` directory for temporary render data. This is the M6.12 breaking storage layout; the legacy `.transcript-studio/projects/.../project.settings.json` path is not read or migrated.
+Portable application preferences: `transcriptstudio.settings.json` next to `TranscriptStudio.exe` (created on first launch). On upgrade, a valid `voicetranscript.settings.json` is migrated to the new filename and `transcriptstudio-settings` format marker; the original legacy file is retained as a backup. For `Lesson.transcript-studio.json`, the current work directory is `Lesson/`, containing `Lesson.project.json`, `Lesson.exported.mp4` (after MP4 export), `Lesson.article.txt` (after text export), and a `cache/` directory for temporary render data. This is the M6.12 breaking storage layout; the legacy `.transcript-studio/projects/.../project.settings.json` path is not read or migrated.
 The right editor font family/size/colors are independent of video typography; standard left-font and output defaults are stored globally but existing projects retain their own layouts.
 Windows deployment: `npm.cmd run verify` then `dotnet publish desktop/TranscriptStudio.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/wpf`. Distribute the resulting EXE after verifying the single-file output. The user installs .NET Desktop Runtime 10 and WebView2; Node.js 22+ is required only to export MP4. No system prerequisites are automatically installed by the app. On the first export, the program can prepare locked npm packages and Remotion's rendering browser with consent. See `docs/M65_SETTINGS_AND_DEPLOYMENT.md`.

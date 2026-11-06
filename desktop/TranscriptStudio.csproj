@@ -28,6 +28,7 @@
     <EmbeddedResource Include="../tsconfig.json" LogicalName="TSRUNTIME/tsconfig.json" />
     <EmbeddedResource Include="../scripts/ensure-browser.mjs" LogicalName="TSRUNTIME/scripts/ensure-browser.mjs" />
     <EmbeddedResource Include="../scripts/export.mjs" LogicalName="TSRUNTIME/scripts/export.mjs" />
+    <EmbeddedResource Include="../scripts/cli-cache.mjs" LogicalName="TSRUNTIME/scripts/cli-cache.mjs" />
     <EmbeddedResource Include="../scripts/transcript-studio-contract.mjs" LogicalName="TSRUNTIME/scripts/transcript-studio-contract.mjs" />
     <EmbeddedResource Include="../src/**/*" LogicalName="TSRUNTIME/src/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

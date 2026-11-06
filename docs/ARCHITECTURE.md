@@ -1,4 +1,4 @@
-# Transcript Studio — current architecture (M6.15.6.2)
+# Transcript Studio — current architecture (M6.15.8)
 
 ## Runtime boundaries
 
@@ -7,12 +7,12 @@
 - **Core (`src/core/`)**: Transcript v2 parsing, word overrides, deterministic pagination, page-plan validation, plain-text conversion, media discovery rules, settings validation and workspace geometry.
 - **Media bridge (`desktop/LocalMediaServer.cs`)**: exposes only the currently selected media file through a tokenized WebView2 resource URL with HTTP byte-range support. It does not map or expose the containing folder.
 - **Rendering (`src/ui/ReaderCanvas.tsx`, `src/remotion/`)**: the preview and Remotion composition use the same reader component. Export receives an immutable project and page-plan snapshot; invalid or source-mismatched page plans are rejected by the reader and recomputed.
-- **Export (`scripts/export.mjs`)**: independently validates Transcript Studio v2 and any supplied project, verifies subtitle SHA-256 and media kind, bundles the Remotion composition, and cleans temporary media/bundle directories in `finally`.
+- **Export (`scripts/export.mjs`)**: independently validates Transcript Studio v2 and any supplied project, verifies subtitle SHA-256 and media kind, and bundles the Remotion composition. It creates a per-invocation `job-*` directory beneath the selected/default CLI cache root. CLI job caches are intentionally retained for inspection (there is no `finally` cleanup in the CLI); the desktop host independently removes its task cache after success/cancellation and preserves a failed commit output when needed.
 - **Skills**: `docs/skills/transcript-studio-paragraphs/` prepares and validates subtitle v2; `docs/skills/transcript-studio-code-review/` defines the end-to-end review and verification workflow.
 
 ## Persistence
 
-- Global preferences: `voicetranscript.settings.json` beside `TranscriptStudio.exe`.
+- Global preferences: `transcriptstudio.settings.json` beside `TranscriptStudio.exe`, with JSON marker `transcriptstudio-settings`. A valid legacy `voicetranscript.settings.json` is migrated only when the new file is absent; the original legacy file is retained after successful migration.
 - For `lesson01.transcript-studio.json`, the only current project path is `lesson01/lesson01.project.json` beside the source JSON.
 - Plain text export is written directly to `lesson01/lesson01.article.txt` in the same work directory, UTF-8 without BOM and CRLF line endings.
 - M6.12 is a breaking storage-layout change. The old `.transcript-studio/projects/.../project.settings.json` path is not searched or migrated. The project JSON contract remains v2.
@@ -75,3 +75,19 @@ M6.14 introduced single-instance startup, tray behavior and hide/restore lifecyc
 - Dialog height is capped to the viewport's available height (`100dvh` with a `100vh` fallback). Only the body scrolls; the header and action footer remain fixed.
 - The action footer has a 70-DIP minimum height and 20-DIP bottom padding. The header has a 64-DIP minimum height.
 - No dialog event handling, dependency preparation, browser download, installation or cancellation logic changed.
+
+
+## M6.15.7 review remediation
+
+- Word edits that normalize to the word's existing display value return the original word array; `commitEditing` therefore does not advance the project revision for an unchanged Enter or a restored original spelling. Valid edits still create a new array and preserve timestamps.
+- `scripts/cli-cache.mjs` provides per-invocation job directory creation under the default or explicit CLI cache root. The WPF runtime embeds this helper together with `export.mjs`; an individual desktop export still owns and cleans its outer `cache/render/job-<guid>` task directory.
+- Stale desktop `cache/render` directories and stale `cache/temp/*.tmp` files are checked independently. A missing `cache/render` no longer skips `cache/temp`. Both cleanups remain best-effort and age-limited.
+- The lightweight MP4 top-level box check is a structural guard, **not** a decoder, track-level or duration verifier. Perform at least one actual export and playback check before declaring media quality verified.
+- Mixed-DPI tray menu placement remains a Windows manual validation item. No DPI rewrite or historical-module deletion was undertaken without a reproduced problem.
+
+
+### Cancelled close focus restoration (M6.15.8)
+
+- When a user cancels an export-exit or unsaved-changes confirmation, the WPF host schedules activation after the modal dialog and current `Closing` event have unwound.
+- The restoration is conditional on the main window having been visible before the confirmation and still being visible when the deferred action runs. A window already hidden in the tray stays hidden.
+- The existing `ActivateFromTray()` path is reused for z-order restoration; no Win32 foreground API or new window manager is introduced.

@@ -1,4 +1,4 @@
-# Transcript Studio — current data model (M6.15.2)
+# Transcript Studio — current data model (M6.15.8)
 
 ## Subtitle input
 
@@ -46,4 +46,4 @@ The WPF host passes an immutable project and page-plan snapshot to Remotion. The
 
 ## Global settings
 
-`voicetranscript.settings.json` lives beside `TranscriptStudio.exe`, is created with defaults on first launch and is atomically replaced after valid setting changes. It is separate from per-subtitle project files.
+`transcriptstudio.settings.json` lives beside `TranscriptStudio.exe`, is created with defaults on first launch and is atomically replaced after valid setting changes. Its JSON marker is `transcriptstudio-settings` (schema version 1). When upgrading from an installation that has only `voicetranscript.settings.json`, the host validates the legacy file, fills missing fields from defaults, changes the format marker, and atomically writes the new file. The original legacy file is retained unchanged after successful migration. Global settings are separate from per-subtitle project files.

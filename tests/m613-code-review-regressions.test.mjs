@@ -83,11 +83,11 @@ test('Code review: optional M1 evidence capture supports both video and audio-on
 });
 
 test('Code review: invalid settings backups never overwrite an earlier backup',()=>{
- assert.match(reader,/settingsFile \+ \"\.invalid-\"[\s\S]*Guid\.NewGuid\(\)\.ToString\(\"N\"\)\[\.\.8\]/);
- assert.match(reader,/File\.Move\(settingsFile, backup\);/);
- assert.doesNotMatch(reader,/File\.Move\(settingsFile, backup, overwrite: true\)/);
+ const backup=reader.slice(reader.indexOf('private static string BackupInvalidSettingsFile'),reader.indexOf('private string CreateDefaultSettings'));
+ assert.match(backup,/file \+ \"\.invalid-\"[\s\S]*Guid\.NewGuid\(\)\.ToString\(\"N\"\)\[\.\.8\]/);
+ assert.match(backup,/File\.Move\(file, backup\);/);
+ assert.doesNotMatch(backup,/File\.Move\(file, backup, overwrite: true\)/);
 });
-
 test('Code review: local media endpoint is token-bound to one selected basename, not a folder mapping',()=>{
  assert.match(media,/var path = Path\.GetFullPath\(absoluteFilePath\)/);
  assert.match(media,/segments\.Length != 3/);

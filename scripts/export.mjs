@@ -1,11 +1,12 @@
 import {readFile,copyFile,mkdir,stat} from 'node:fs/promises';
 import path from 'node:path';import {execFileSync} from 'node:child_process';import{fileURLToPath}from'node:url';
 import {assertTranscriptStudio,assertProjectForExport} from './transcript-studio-contract.mjs';
+import {createCliTaskCacheDir} from './cli-cache.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 function getArg(name){const i=process.argv.indexOf(`--${name}`);return i<0?undefined:process.argv[i+1]}
 const media=getArg('media'),json=getArg('json'),output=getArg('out'),projectPath=getArg('project'),cacheArg=getArg('cache-dir');
 if(!media||!json||!output){console.error('Usage: npm run export -- --media INPUT.mp4|mkv|mp3|wav --json FILE.transcript-studio.json --out OUTPUT.mp4 [--project FILE.project.json] [--cache-dir DIRECTORY]');process.exit(2)}
-const cacheDir=cacheArg?path.resolve(cacheArg):path.join(path.dirname(path.resolve(output)),'.transcript-studio-cache');
+const cacheRoot=cacheArg?path.resolve(cacheArg):path.join(path.dirname(path.resolve(output)),'.transcript-studio-cache');
 let publicDir,bundleLocation;
 try{
  const subtitleBytes=await readFile(json),input=JSON.parse(subtitleBytes.toString('utf8').replace(/^\uFEFF/,''));assertTranscriptStudio(input);
@@ -28,7 +29,7 @@ try{
  if(last>durationSec+0.5)throw Error(`Subtitle ends at ${last}s, beyond media duration ${durationSec}s`);
  if([media,json,projectPath].filter(Boolean).some(f=>path.resolve(f)===path.resolve(output)))throw Error('Cannot overwrite input');
  await mkdir(path.dirname(output),{recursive:true});
- await mkdir(cacheDir,{recursive:true});
+ const cacheDir=await createCliTaskCacheDir(cacheRoot);
  // Keep Node/Chromium temporary work associated with this export task.
  process.env.TEMP=cacheDir;process.env.TMP=cacheDir;process.env.TMPDIR=cacheDir;
  publicDir=path.join(cacheDir,'media');await mkdir(publicDir,{recursive:true});

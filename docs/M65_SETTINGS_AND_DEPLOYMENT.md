@@ -4,7 +4,7 @@
 
 ## Decisions
 
-- `voicetranscript.settings.json` lives **next to TranscriptStudio.exe**; it is created automatically on first launch and atomically replaced on every valid settings change.
+- The original M6.5 settings file was `voicetranscript.settings.json`. Since M6.15.8, the current file is `transcriptstudio.settings.json` **next to TranscriptStudio.exe**; it is created automatically on first launch and atomically replaced on every valid settings change. When only a valid legacy file exists, the app migrates its values to the new filename and `transcriptstudio-settings` marker, while retaining the original file unchanged.
 - Editing and exporting continue to use a per-media project snapshot at `<media-folder>/.transcript-studio/projects/<media-stem>/project.settings.json`. Distinct videos in the same directory cannot overwrite each other.
 - Existing M6 `.project.json` files are not automatically migrated. Back them up before upgrading; the source subtitle JSON is not modified.
 - The right editor font (family, DIP size, text color, background color) is independent of the left video font. Video styles and output dimensions are defaults for new projects, but projects retain their own saved snapshots.
@@ -26,7 +26,7 @@ Publish `dist\wpf\TranscriptStudio.exe` only, after verifying the publish output
 
 ## Windows end-to-end acceptance checklist
 
-1. Launch with .NET Desktop Runtime 10 and WebView2 installed; first launch creates the default JSON beside the EXE.
+1. Launch with .NET Desktop Runtime 10 and WebView2 installed; first launch creates `transcriptstudio.settings.json` beside the EXE. When upgrading, verify that a valid `voicetranscript.settings.json` is migrated and retained unchanged.
 2. Close, reopen, confirm retained settings; test invalid configuration backup and read-only folder error.
 3. Settings labels and controls share a row; right editor text is 16 DIP independent of left preview zoom; right color and background apply only to the editor.
 4. Open same-name MP4 + standard subtitle JSON; play, seek, save `project.settings.json`, reopen and recover edits.
